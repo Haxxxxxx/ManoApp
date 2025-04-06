@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { Song } from '../types';
 
 const SongDetail = () => {
-  const { tripId, songId } = useParams<{ tripId: string; songId: string }>();
+  const { songId } = useParams<{ songId: string }>();
   const navigate = useNavigate();
   const [song, setSong] = useState<Song | null>(null);
 

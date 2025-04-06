@@ -1,40 +1,99 @@
 import { Box, Avatar, Typography, Button, Stack } from '@mui/material';
-import PublishIcon from '@mui/icons-material/Publish';
-import MusicNoteIcon from '@mui/icons-material/MusicNote';
-import GarageIcon from '@mui/icons-material/Garage';
-import FolderIcon from '@mui/icons-material/Folder';
+import { useAuth } from '../contexts/AuthContext';
+import LogoutIcon from '@mui/icons-material/Logout';
+import EditIcon from '@mui/icons-material/Edit';
+import { useNavigate } from 'react-router-dom';
 
 const RightPanel = () => {
+  const { currentUser, artistProfile, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Failed to log out:', error);
+    }
+  };
+
+  const handleEditProfile = () => {
+    navigate('/profile/edit');
+  };
+
   return (
     <Box
       sx={{
-        width: 300,
+        width: 250,
         bgcolor: 'background.paper',
-        p: 3,
+        height: '100%',
+        p: 2,
         display: 'flex',
         flexDirection: 'column',
         gap: 3,
       }}
     >
-      {/* User Profile */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Avatar
-          sx={{ width: 64, height: 64 }}
-          src="https://via.placeholder.com/64"
-        />
-        <Box>
-          <Typography variant="h6">John Doe</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Music Producer & DJ
+      {/* Artist Profile */}
+      {currentUser && artistProfile && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Avatar
+            sx={{ width: 100, height: 100, mb: 2 }}
+            src={currentUser.photoURL || undefined}
+          >
+            {artistProfile.displayName?.[0] || currentUser.email?.[0]}
+          </Avatar>
+          <Typography variant="h6" gutterBottom>
+            {artistProfile.displayName}
           </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            {currentUser.email}
+          </Typography>
+          {artistProfile.bio && (
+            <Typography variant="body2" sx={{ textAlign: 'center', mb: 2 }}>
+              {artistProfile.bio}
+            </Typography>
+          )}
+          {artistProfile.genres && artistProfile.genres.length > 0 && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, justifyContent: 'center' }}>
+              {artistProfile.genres.map((genre) => (
+                <Typography
+                  key={genre}
+                  variant="caption"
+                  sx={{
+                    bgcolor: 'primary.main',
+                    color: 'primary.contrastText',
+                    px: 1,
+                    py: 0.5,
+                    borderRadius: 1,
+                  }}
+                >
+                  {genre}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          <Button
+            variant="outlined"
+            startIcon={<EditIcon />}
+            onClick={handleEditProfile}
+            sx={{ mb: 2 }}
+          >
+            Edit Profile
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+          >
+            Logout
+          </Button>
         </Box>
-      </Box>
+      )}
 
       {/* Action Buttons */}
-      <Stack spacing={2}>
+      <Stack spacing={2} sx={{ mt: 'auto' }}>
         <Button
           variant="contained"
-          startIcon={<PublishIcon />}
           fullWidth
         >
           Export to Spotify
@@ -42,7 +101,6 @@ const RightPanel = () => {
 
         <Button
           variant="outlined"
-          startIcon={<MusicNoteIcon />}
           fullWidth
         >
           Music Panel
@@ -50,7 +108,6 @@ const RightPanel = () => {
 
         <Button
           variant="outlined"
-          startIcon={<GarageIcon />}
           fullWidth
         >
           My Garage
@@ -58,7 +115,6 @@ const RightPanel = () => {
 
         <Button
           variant="outlined"
-          startIcon={<FolderIcon />}
           fullWidth
         >
           All Projects

@@ -6,7 +6,7 @@ import Sidebar from './components/Sidebar'
 import MainContent from './components/MainContent'
 import RightPanel from './components/RightPanel'
 import SongDetail from './pages/SongDetail'
-import Login from './pages/Login'
+import AuthForm from './components/AuthForm'
 
 const theme = createTheme({
   palette: {
@@ -29,7 +29,21 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!currentUser) {
-    return <Navigate to="/login" />
+    return <Navigate to="/auth" />
+  }
+
+  return <>{children}</>
+}
+
+const AuthRoute = ({ children }: { children: React.ReactNode }) => {
+  const { currentUser, loading } = useAuth()
+
+  if (loading) {
+    return <Box>Loading...</Box>
+  }
+
+  if (currentUser) {
+    return <Navigate to="/" />
   }
 
   return <>{children}</>
@@ -40,15 +54,35 @@ function AppContent() {
 
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Sidebar 
-        selectedTrip={selectedTrip} 
-        onSelectTrip={setSelectedTrip}
-      />
       <Routes>
-        <Route path="/" element={<MainContent selectedTrip={selectedTrip} />} />
-        <Route path="/trip/:tripId/song/:songId" element={<SongDetail />} />
+        <Route path="/auth" element={
+          <AuthRoute>
+            <AuthForm />
+          </AuthRoute>
+        } />
+        <Route path="/" element={
+          <ProtectedRoute>
+            <Box sx={{ display: 'flex', width: '100%' }}>
+              <Sidebar 
+                selectedTrip={selectedTrip} 
+                onSelectTrip={setSelectedTrip}
+              />
+              <MainContent selectedTrip={selectedTrip} />
+            </Box>
+          </ProtectedRoute>
+        } />
+        <Route path="/trip/:tripId/song/:songId" element={
+          <ProtectedRoute>
+            <Box sx={{ display: 'flex', width: '100%' }}>
+              <Sidebar 
+                selectedTrip={selectedTrip} 
+                onSelectTrip={setSelectedTrip}
+              />
+              <SongDetail />
+            </Box>
+          </ProtectedRoute>
+        } />
       </Routes>
-      <RightPanel />
     </Box>
   )
 }
@@ -59,17 +93,7 @@ function App() {
       <CssBaseline />
       <Router>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <AppContent />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
+          <AppContent />
         </AuthProvider>
       </Router>
     </ThemeProvider>
