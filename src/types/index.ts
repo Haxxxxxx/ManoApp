@@ -3,6 +3,7 @@ export interface Trip {
   name: string;
   description?: string;
   createdAt: string;
+  userId: string;
   songs: Song[];
 }
 
@@ -14,6 +15,7 @@ export interface Song {
   filePath?: string;
   imagePath?: string;
   projectPath?: string;
+  userId: string;
   metadata?: {
     bpm?: number;
     key?: string;

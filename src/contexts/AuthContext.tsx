@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { createArtistProfile, getArtistProfile, ArtistProfile } from '../services/artistService';
+import { Box, CircularProgress } from '@mui/material';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -148,7 +149,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? (
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '100vh',
+            bgcolor: 'background.default'
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }; 

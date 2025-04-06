@@ -6,12 +6,14 @@ export const mockTrips: Trip[] = [
     name: 'Summer 2023',
     description: 'My summer playlist for 2023',
     createdAt: '2023-06-01',
+    userId: 'mock-user-id',
     songs: [
       {
         id: '1',
         title: 'Summer Vibes',
         artist: 'Artist 1',
         duration: '3:45',
+        userId: 'mock-user-id',
         metadata: {
           bpm: 120,
           key: 'C Major',
@@ -25,6 +27,7 @@ export const mockTrips: Trip[] = [
         title: 'Sunset Dreams',
         artist: 'Artist 2',
         duration: '4:20',
+        userId: 'mock-user-id',
         metadata: {
           bpm: 110,
           key: 'G Minor',
@@ -39,12 +42,14 @@ export const mockTrips: Trip[] = [
     name: 'Road Trip',
     description: 'Perfect playlist for long drives',
     createdAt: '2023-07-15',
+    userId: 'mock-user-id',
     songs: [
       {
         id: '3',
         title: 'Highway Star',
         artist: 'Artist 3',
         duration: '5:30',
+        userId: 'mock-user-id',
         metadata: {
           bpm: 140,
           key: 'A Major',

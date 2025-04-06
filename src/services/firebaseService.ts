@@ -42,12 +42,32 @@ export const deleteTrip = async (tripId: string) => {
 };
 
 export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
-  const docRef = await addDoc(collection(db, songsCollection), {
-    ...song,
-    tripId,
-    createdAt: new Date().toISOString(),
-  });
-  return { ...song, id: docRef.id };
+  try {
+    // Get the trip first to ensure it exists and get the userId
+    const tripDoc = await getDoc(doc(db, tripsCollection, tripId));
+    if (!tripDoc.exists()) {
+      throw new Error('Trip not found');
+    }
+
+    const tripData = tripDoc.data();
+    const docRef = await addDoc(collection(db, songsCollection), {
+      ...song,
+      tripId,
+      userId: tripData.userId, // Add the userId from the trip
+      createdAt: new Date().toISOString(),
+    });
+
+    return { 
+      ...song, 
+      id: docRef.id,
+      tripId,
+      userId: tripData.userId,
+      createdAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error creating song:', error);
+    throw error;
+  }
 };
 
 export const getSongs = async (tripId: string) => {

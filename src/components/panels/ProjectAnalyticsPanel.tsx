@@ -1,4 +1,4 @@
-import { Box, Typography, Paper, Grid, Card, CardContent, LinearProgress } from '@mui/material';
+import { Box, Typography, Paper, Grid, Card, CardContent, LinearProgress, Button } from '@mui/material';
 import { Song } from '../../types';
 
 interface ProjectAnalyticsPanelProps {
@@ -9,19 +9,26 @@ interface ProjectAnalyticsPanelProps {
 const ProjectAnalyticsPanel = ({ songs, onClose }: ProjectAnalyticsPanelProps) => {
   // Calculate statistics
   const totalSongs = songs.length;
-  const totalDuration = songs.reduce((acc, song) => acc + (parseInt(song.duration) || 0), 0);
-  const averageBpm = songs.reduce((acc, song) => acc + (song.metadata?.bpm || 0), 0) / totalSongs;
+  const totalDuration = songs.reduce((acc, song) => {
+    const [minutes, seconds] = song.duration.split(':').map(Number);
+    return acc + minutes * 60 + seconds;
+  }, 0);
+  const averageBpm = songs.reduce((acc, song) => acc + (song.metadata?.bpm || 0), 0) / totalSongs || 0;
   
   // Mock data for genre distribution
   const genreDistribution = [
-    { genre: 'Hip Hop', percentage: 40 },
-    { genre: 'R&B', percentage: 30 },
-    { genre: 'Pop', percentage: 20 },
-    { genre: 'Other', percentage: 10 },
+    { genre: 'Pop', percentage: 40 },
+    { genre: 'Rock', percentage: 30 },
+    { genre: 'Electronic', percentage: 20 },
+    { genre: 'Hip Hop', percentage: 10 },
   ];
 
   return (
-    <Box sx={{ width: '100%', height: '100%', p: 3 }}>
+    <Box sx={{ p: 3, maxWidth: 800, margin: '0 auto' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">Project Analytics</Typography>
+        <Button onClick={onClose}>Close</Button>
+      </Box>
       <Paper sx={{ p: 3, maxWidth: 1200, margin: '0 auto' }}>
         <Typography variant="h5" gutterBottom>Project Analytics</Typography>
 

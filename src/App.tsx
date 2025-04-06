@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material'
+import { Box, CssBaseline, ThemeProvider, createTheme, CircularProgress } from '@mui/material'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Sidebar from './components/Sidebar'
 import MainContent from './components/MainContent'
-import RightPanel from './components/RightPanel'
 import SongDetail from './pages/SongDetail'
 import AuthForm from './components/AuthForm'
 
@@ -25,7 +24,19 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { currentUser, loading } = useAuth()
 
   if (loading) {
-    return <Box>Loading...</Box>
+    return (
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          bgcolor: 'background.default'
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    )
   }
 
   if (!currentUser) {
@@ -39,7 +50,19 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   const { currentUser, loading } = useAuth()
 
   if (loading) {
-    return <Box>Loading...</Box>
+    return (
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          bgcolor: 'background.default'
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    )
   }
 
   if (currentUser) {
