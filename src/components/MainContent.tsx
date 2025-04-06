@@ -1,13 +1,26 @@
-import { Box, Typography, List, ListItem, ListItemButton, ListItemText, Paper, Card, IconButton, Divider } from '@mui/material';
+import { Box, Typography, List, ListItem, ListItemButton, ListItemText, Paper, IconButton, Button, Dialog } from '@mui/material';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { getTrip, getSongs } from '../services/firebaseService';
 import { Song } from '../types';
 import { useEffect, useState } from 'react';
-import AddCircleIcon from '@mui/icons-material/AddCircle';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import MicIcon from '@mui/icons-material/Mic';
-import LibraryMusicIcon from '@mui/icons-material/LibraryMusic';
+import MusicNoteIcon from '@mui/icons-material/MusicNote';
+import PublishIcon from '@mui/icons-material/Publish';
+import EditIcon from '@mui/icons-material/Edit';
+import GroupAddIcon from '@mui/icons-material/GroupAdd';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import SettingsIcon from '@mui/icons-material/Settings';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import TagIcon from '@mui/icons-material/Tag';
+
+// Import panels
+import ExportSettingsPanel from './panels/ExportSettingsPanel';
+import MetadataEditorPanel from './panels/MetadataEditorPanel';
+import CollaboratorsPanel from './panels/CollaboratorsPanel';
+import ProjectAnalyticsPanel from './panels/ProjectAnalyticsPanel';
+
+type ActivePanel = 'export' | 'metadata' | 'collaborators' | 'analytics' | null;
 
 interface MainContentProps {
   selectedTrip: string | null;
@@ -17,6 +30,7 @@ const MainContent = ({ selectedTrip }: MainContentProps) => {
   const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
   const [tripName, setTripName] = useState<string>('');
+  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
 
   useEffect(() => {
     const fetchTripData = async () => {
@@ -47,53 +61,48 @@ const MainContent = ({ selectedTrip }: MainContentProps) => {
     }
   };
 
+  const handleClosePanel = () => {
+    setActivePanel(null);
+  };
+
+  const renderActivePanel = () => {
+    if (!activePanel) return null;
+
+    const panels = {
+      export: <ExportSettingsPanel onClose={handleClosePanel} />,
+      metadata: <MetadataEditorPanel songs={songs} onClose={handleClosePanel} />,
+      collaborators: <CollaboratorsPanel tripId={selectedTrip || ''} onClose={handleClosePanel} />,
+      analytics: <ProjectAnalyticsPanel songs={songs} onClose={handleClosePanel} />,
+    };
+
+    return (
+      <Dialog 
+        open={true} 
+        onClose={handleClosePanel}
+        maxWidth={false}
+        fullWidth
+        PaperProps={{
+          sx: { 
+            width: '95%', 
+            height: '90%',
+            maxWidth: 'none',
+          }
+        }}
+      >
+        {panels[activePanel]}
+      </Dialog>
+    );
+  };
+
   return (
     <Box sx={{ display: 'flex', height: '100%', gap: 2, p: 2 }}>
-      {/* Left Panel */}
-      <Box sx={{ width: 300, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {/* Main Content */}
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Typography variant="h5" sx={{ p: 2 }}>
           {selectedTrip ? tripName : 'Select a Trip'}
         </Typography>
 
-        <Card sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-            <PlayArrowIcon />
-            <Typography>Quick Actions</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <IconButton color="primary">
-              <MicIcon />
-            </IconButton>
-            <IconButton color="primary">
-              <LibraryMusicIcon />
-            </IconButton>
-          </Box>
-        </Card>
-
-        <Card sx={{ p: 2, flexGrow: 1 }}>
-          <Typography variant="subtitle1" gutterBottom>Recent Files</Typography>
-          <List dense>
-            {songs.slice(0, 5).map((song) => (
-              <ListItem key={song.id} disablePadding>
-                <ListItemButton onClick={() => handleSongClick(song)}>
-                  <ListItemText primary={song.title} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </Card>
-
-        <IconButton 
-          color="primary" 
-          sx={{ alignSelf: 'center', width: 56, height: 56 }}
-        >
-          <AddCircleIcon sx={{ fontSize: 40 }} />
-        </IconButton>
-      </Box>
-
-      {/* Middle Panel */}
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Paper sx={{ p: 2, mb: 2 }}>
+        <Paper sx={{ p: 2 }}>
           <Box
             {...getRootProps()}
             sx={{
@@ -116,10 +125,21 @@ const MainContent = ({ selectedTrip }: MainContentProps) => {
         </Paper>
 
         <Paper sx={{ flexGrow: 1, p: 2 }}>
-          <Typography variant="h6" gutterBottom>All Files</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <MusicNoteIcon sx={{ mr: 1 }} />
+            <Typography variant="h6">Songs</Typography>
+          </Box>
           <List>
             {songs.map((song) => (
-              <ListItem key={song.id} divider>
+              <ListItem 
+                key={song.id} 
+                divider 
+                secondaryAction={
+                  <IconButton edge="end" aria-label="play" onClick={() => console.log('Play song')}>
+                    <PlayArrowIcon />
+                  </IconButton>
+                }
+              >
                 <ListItemButton onClick={() => handleSongClick(song)}>
                   <ListItemText
                     primary={song.title}
@@ -128,40 +148,110 @@ const MainContent = ({ selectedTrip }: MainContentProps) => {
                 </ListItemButton>
               </ListItem>
             ))}
+            {songs.length === 0 && (
+              <ListItem>
+                <ListItemText 
+                  primary="No songs yet"
+                  secondary="Drop audio files above to add songs to your trip"
+                />
+              </ListItem>
+            )}
           </List>
         </Paper>
       </Box>
 
       {/* Right Panel */}
       <Box sx={{ width: 300, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Paper sx={{ p: 2, height: '50%' }}>
-          <Typography variant="h6" gutterBottom>Project Info</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Created: {new Date().toLocaleDateString()}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Files: {songs.length}
-          </Typography>
+        {/* Project Actions */}
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>Project Actions</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Button
+              startIcon={<PublishIcon />}
+              variant="outlined"
+              fullWidth
+              onClick={() => setActivePanel('export')}
+            >
+              Export Settings
+            </Button>
+            <Button
+              startIcon={<EditIcon />}
+              variant="outlined"
+              fullWidth
+              onClick={() => setActivePanel('metadata')}
+            >
+              Edit Metadata
+            </Button>
+            <Button
+              startIcon={<GroupAddIcon />}
+              variant="outlined"
+              fullWidth
+              onClick={() => setActivePanel('collaborators')}
+            >
+              Collaborators
+            </Button>
+            <Button
+              startIcon={<BarChartIcon />}
+              variant="outlined"
+              fullWidth
+              onClick={() => setActivePanel('analytics')}
+            >
+              Project Analytics
+            </Button>
+          </Box>
         </Paper>
 
-        <Paper sx={{ p: 2, height: '50%' }}>
-          <Typography variant="h6" gutterBottom>Activity</Typography>
-          <List dense>
-            <ListItem>
-              <ListItemText 
-                primary="File added"
-                secondary="2 minutes ago"
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText 
-                primary="Project updated"
-                secondary="1 hour ago"
-              />
-            </ListItem>
-          </List>
+        {/* Publishing Options */}
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>Publishing</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Button
+              startIcon={<CloudUploadIcon />}
+              variant="outlined"
+              color="success"
+              fullWidth
+              onClick={() => console.log('Spotify settings')}
+            >
+              Spotify
+            </Button>
+            <Button
+              startIcon={<CloudUploadIcon />}
+              variant="outlined"
+              color="warning"
+              fullWidth
+              onClick={() => console.log('SoundCloud settings')}
+            >
+              SoundCloud
+            </Button>
+          </Box>
+        </Paper>
+
+        {/* Project Settings */}
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>Settings</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Button
+              startIcon={<TagIcon />}
+              variant="outlined"
+              fullWidth
+              onClick={() => console.log('Manage tags')}
+            >
+              Tags & Categories
+            </Button>
+            <Button
+              startIcon={<SettingsIcon />}
+              variant="outlined"
+              fullWidth
+              onClick={() => console.log('Project settings')}
+            >
+              Project Settings
+            </Button>
+          </Box>
         </Paper>
       </Box>
+
+      {/* Feature Panels */}
+      {renderActivePanel()}
     </Box>
   );
 };
