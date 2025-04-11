@@ -1,6 +1,8 @@
 import { db } from '../firebase/config';
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { Trip, Song } from '../types';
+import {storage} from '../firebase/config';
+import { ref, uploadString } from 'firebase/storage';
 
 const tripsCollection = 'trips';
 const songsCollection = 'songs';
@@ -43,26 +45,57 @@ export const deleteTrip = async (tripId: string) => {
 
 export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
   try {
-    // Get the trip first to ensure it exists and get the userId
+    // Get the trip first to ensure it exists
     const tripDoc = await getDoc(doc(db, tripsCollection, tripId));
     if (!tripDoc.exists()) {
       throw new Error('Trip not found');
     }
 
-    const tripData = tripDoc.data();
-    const docRef = await addDoc(collection(db, songsCollection), {
+    const tripData = tripDoc.data() as Trip;
+    
+    // Check if user is a member of the trip
+    const isMember = tripData.userId === song.userId || 
+                    (tripData.collaborators && tripData.collaborators[song.userId]);
+    
+    if (!isMember) {
+      throw new Error('You do not have permission to create projects in this trip');
+    }
+
+    // Create the song with the provided userId
+    const songData = {
       ...song,
       tripId,
-      userId: tripData.userId, // Add the userId from the trip
       createdAt: new Date().toISOString(),
+      metadata: {
+        ...song.metadata,
+        tags: song.metadata?.tags || [],
+        genre: song.metadata?.genre || []
+      }
+    };
+
+    // Create the song document
+    const docRef = await addDoc(collection(db, songsCollection), songData);
+
+    // Create a folder reference in storage
+    if (storage) {
+      try {
+        const folderRef = ref(storage, `projects/${tripId}/${docRef.id}`);
+        // Create an empty file to represent the folder
+        await uploadString(folderRef, '', 'raw');
+      } catch (storageError) {
+        console.warn('Failed to create storage folder:', storageError);
+        // Continue even if folder creation fails
+      }
+    }
+
+    console.log('Song created successfully:', {
+      id: docRef.id,
+      ...songData
     });
 
     return { 
-      ...song, 
-      id: docRef.id,
-      tripId,
-      userId: tripData.userId,
-      createdAt: new Date().toISOString()
+      ...songData, 
+      id: docRef.id
     };
   } catch (error) {
     console.error('Error creating song:', error);

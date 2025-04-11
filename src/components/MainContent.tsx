@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getTrip, getSongs, createSong } from '../services/firebaseService';
 import { getSharedDriveFiles, getNotionTemplate } from '../services/storageService';
 import { Song, Trip } from '../types';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
@@ -23,6 +23,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import AddIcon from '@mui/icons-material/Add';
 import FolderSharedIcon from '@mui/icons-material/FolderShared';
 import DescriptionIcon from '@mui/icons-material/Description';
+import React from 'react';
 
 // Import panels
 import ExportSettingsPanel from './panels/ExportSettingsPanel';
@@ -32,6 +33,7 @@ import ProjectAnalyticsPanel from './panels/ProjectAnalyticsPanel';
 import TagsAndCategoriesPanel from './panels/TagsAndCategoriesPanel';
 import ProjectSettingsPanel from './panels/ProjectSettingsPanel';
 import PublishingPanel from './panels/PublishingPanel';
+import EmptyProjectPanel from './panels/EmptyProjectPanel';
 
 type ActivePanel = 'export' | 'metadata' | 'collaborators' | 'analytics' | 'tags' | 'settings' | 'publish-spotify' | 'publish-soundcloud' | null;
 
@@ -52,6 +54,8 @@ const MainContent = ({ selectedTrip }: MainContentProps) => {
   const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [templateError, setTemplateError] = useState<string | null>(null);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [showEmptyProjectPanel, setShowEmptyProjectPanel] = useState(false);
 
   useEffect(() => {
     const fetchTripData = async () => {
@@ -87,40 +91,17 @@ const MainContent = ({ selectedTrip }: MainContentProps) => {
     setActivePanel(null);
   };
 
-  const handleCreateEmptyProject = async () => {
+  const handleCreateEmptyProject = () => {
     if (!selectedTrip) {
       setError('Please select a trip first');
       return;
     }
-    
-    if (!currentUser) {
-      setError('You must be logged in to create a project');
-      return;
-    }
-    
-    setIsCreating(true);
-    setError(null);
-    
-    try {
-      const newSong: Omit<Song, 'id'> = {
-        title: 'New Project',
-        artist: artistProfile?.displayName || currentUser?.email?.split('@')[0] || 'Unknown Artist',
-        duration: '0:00',
-        metadata: {
-          tags: ['project'],
-          genre: [],
-        },
-        userId: currentUser.uid
-      };
+    setIsCreatingProject(true);
+  };
 
-      const createdSong = await createSong(selectedTrip, newSong);
-      setSongs(prev => [...prev, createdSong]);
-    } catch (err) {
-      console.error('Error creating project:', err);
-      setError('Failed to create project. Please try again.');
-    } finally {
-      setIsCreating(false);
-    }
+  const handleProjectCreated = (newSong: Song) => {
+    setSongs(prev => [...prev, newSong]);
+    setIsCreatingProject(false);
   };
 
   const handleOpenSharedDrive = async () => {
@@ -154,7 +135,27 @@ const MainContent = ({ selectedTrip }: MainContentProps) => {
   };
 
   const renderActivePanel = () => {
-    if (!activePanel) return null;
+    if (!activePanel) {
+      if (isCreatingProject && selectedTrip) {
+        return (
+          <Dialog
+            open={true}
+            onClose={() => setIsCreatingProject(false)}
+            maxWidth="md"
+            fullWidth
+          >
+            <Suspense fallback={<CircularProgress />}>
+              <EmptyProjectPanel
+                tripId={selectedTrip}
+                onClose={() => setIsCreatingProject(false)}
+                onProjectCreated={handleProjectCreated}
+              />
+            </Suspense>
+          </Dialog>
+        );
+      }
+      return null;
+    }
 
     // For panels that require tripData, ensure it exists
     if (activePanel !== 'export' && !tripData) return null;
