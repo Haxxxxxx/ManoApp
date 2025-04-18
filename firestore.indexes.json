@@ -1,11 +1,11 @@
 {
   "indexes": [
     {
-      "collectionGroup": "trips",
+      "collectionGroup": "songs",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "userId",
+          "fieldPath": "tripId",
           "order": "ASCENDING"
         },
         {
@@ -15,11 +15,11 @@
       ]
     },
     {
-      "collectionGroup": "songs",
+      "collectionGroup": "trips",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "tripId",
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {

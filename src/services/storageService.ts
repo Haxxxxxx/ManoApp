@@ -1,20 +1,47 @@
-import { ref, listAll, getDownloadURL, uploadBytesResumable, UploadTask, FirebaseStorage } from 'firebase/storage';
+import { ref, listAll, getDownloadURL, uploadBytes, deleteObject, FirebaseStorage } from 'firebase/storage';
 import { storage } from '../firebase/config';
+import { adminUploadFile, adminDeleteFile } from './adminService';
+import { getStorage } from 'firebase/storage';
 
 const SHARED_DRIVE_FOLDER = 'shared-drive';
 const NOTION_TEMPLATES_FOLDER = 'notion-templates';
+const MUSIC_FILES_FOLDER = 'music-files';
+const COVER_ART_FOLDER = 'cover-art';
 
-const checkStorageAvailability = () => {
+// Maximum file size in bytes (100MB)
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
+// Allowed music file types
+const ALLOWED_MUSIC_TYPES = [
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/ogg',
+  'audio/aac',
+  'audio/m4a'
+];
+
+// Allowed image file types
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp'
+];
+
+// Helper function to check if storage is available
+const checkStorage = () => {
   if (!storage) {
-    throw new Error('Firebase Storage is not available. Please check your configuration and ensure Storage is enabled in your Firebase project.');
+    throw new Error('Storage service is not available. Please check your Firebase configuration and ensure Storage is enabled in your project.');
   }
+  return storage as FirebaseStorage;
 };
 
 export const getSharedDriveFiles = async () => {
-  checkStorageAvailability();
+  const storageInstance = checkStorage();
 
   try {
-    const storageRef = ref(storage as FirebaseStorage, SHARED_DRIVE_FOLDER);
+    const storageRef = ref(storageInstance, SHARED_DRIVE_FOLDER);
     const result = await listAll(storageRef);
     
     const files = await Promise.all(
@@ -36,10 +63,10 @@ export const getSharedDriveFiles = async () => {
 };
 
 export const getNotionTemplate = async (templateName: string) => {
-  checkStorageAvailability();
+  const storageInstance = checkStorage();
 
   try {
-    const templateRef = ref(storage as FirebaseStorage, `${NOTION_TEMPLATES_FOLDER}/${templateName}`);
+    const templateRef = ref(storageInstance, `${NOTION_TEMPLATES_FOLDER}/${templateName}`);
     const url = await getDownloadURL(templateRef);
     return url;
   } catch (error) {
@@ -132,5 +159,109 @@ export const storageService = {
       console.error('Error in uploadFileInChunks:', error);
       throw new Error('Failed to upload file in chunks. Please check your Firebase Storage configuration.');
     }
+  }
+};
+
+/**
+ * Upload a music file to Firebase Storage
+ * @param file The file to upload
+ * @param tripId The ID of the trip this file belongs to
+ * @param songId The ID of the song this file belongs to (optional)
+ * @returns The download URL of the uploaded file
+ */
+export const uploadMusicFile = async (file: File, tripId: string, songId?: string): Promise<string> => {
+  const storageInstance = checkStorage();
+
+  // Validate file size
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File size exceeds maximum limit of ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+  }
+
+  // Validate file type
+  if (!ALLOWED_MUSIC_TYPES.includes(file.type)) {
+    throw new Error(`Invalid file type. Allowed types: ${ALLOWED_MUSIC_TYPES.join(', ')}`);
+  }
+
+  try {
+    const fileName = `${Date.now()}-${file.name}`;
+    const filePath = songId 
+      ? `${MUSIC_FILES_FOLDER}/${tripId}/${songId}/${fileName}`
+      : `${MUSIC_FILES_FOLDER}/${tripId}/${fileName}`;
+    
+    const storageRef = ref(storageInstance, filePath);
+    await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(storageRef);
+    
+    console.log('Music file uploaded successfully:', downloadURL);
+    return downloadURL;
+  } catch (error) {
+    console.error('Error uploading music file:', error);
+    throw error;
+  }
+};
+
+/**
+ * Upload a cover art image to Firebase Storage
+ * @param file The image file to upload
+ * @param tripId The ID of the trip this file belongs to
+ * @param songId The ID of the song this file belongs to (optional)
+ * @returns The download URL of the uploaded file
+ */
+export const uploadCoverArt = async (file: File, tripId: string, songId?: string): Promise<string> => {
+  const storageInstance = checkStorage();
+
+  // Validate file size
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File size exceeds maximum limit of ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
+  }
+
+  // Validate file type
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    throw new Error(`Invalid file type. Allowed types: ${ALLOWED_IMAGE_TYPES.join(', ')}`);
+  }
+
+  try {
+    const fileName = `${Date.now()}-${file.name}`;
+    const filePath = songId 
+      ? `${COVER_ART_FOLDER}/${tripId}/${songId}/${fileName}`
+      : `${COVER_ART_FOLDER}/${tripId}/${fileName}`;
+    
+    const storageRef = ref(storageInstance, filePath);
+    await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(storageRef);
+    
+    console.log('Cover art uploaded successfully:', downloadURL);
+    return downloadURL;
+  } catch (error) {
+    console.error('Error uploading cover art:', error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a file from Firebase Storage
+ * @param filePath The path of the file to delete
+ */
+export const deleteFile = async (filePath: string): Promise<void> => {
+  const storageInstance = checkStorage();
+
+  try {
+    const storageRef = ref(storageInstance, filePath);
+    await deleteObject(storageRef);
+    console.log('File deleted successfully:', filePath);
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    throw error;
+  }
+};
+
+export const getAudioUrl = async (filePath: string): Promise<string> => {
+  try {
+    const storageInstance = checkStorage();
+    const audioRef = ref(storageInstance, filePath);
+    return await getDownloadURL(audioRef);
+  } catch (error) {
+    console.error('Error getting audio URL:', error);
+    throw new Error('Failed to get audio URL');
   }
 }; 

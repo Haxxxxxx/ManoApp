@@ -12,7 +12,11 @@ import {
   Alert,
   Divider,
   InputAdornment,
-  LinearProgress
+  LinearProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, MusicNote as MusicNoteIcon } from '@mui/icons-material';
 import { storageService } from '../../services/storageService';
@@ -23,10 +27,19 @@ import { useAuth } from '../../contexts/AuthContext';
 interface EmptyProjectPanelProps {
   onClose: () => void;
   tripId: string;
+  onProjectCreated?: (song: Song) => void;
+  isDialog?: boolean;
+  mode?: 'project' | 'song';
 }
 
-const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({ onClose, tripId }) => {
-  const { currentUser } = useAuth();
+const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({ 
+  onClose, 
+  tripId, 
+  onProjectCreated, 
+  isDialog = false,
+  mode = 'project'
+}) => {
+  const { currentUser, artistProfile } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -150,7 +163,6 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({ onClose, tripId }
       }
 
       if (videoFile) {
-        const isLargeFile = videoFile.size > 10 * 1024 * 1024; // 10MB
         videoPath = await storageService.uploadFile(
           videoFile,
           `projects/${tripId}/videos/${videoFile.name}`,
@@ -158,64 +170,43 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({ onClose, tripId }
         );
       }
 
-      const newSong: Omit<Song, 'id'> = {
-        title: title.trim(),
-        description: description.trim(),
+      // Create the song
+      const songData = {
+        title,
+        artist: artistProfile?.name || 'Unknown Artist',
+        duration: duration || '0:00',
         userId: currentUser.uid,
-        tripId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
         filePath: audioPath,
         imagePath,
         videoPath,
         metadata: {
-          lyrics,
-          duration,
-          style,
           tags,
-          feats,
-          genre: style ? [style] : [],
+          genre: [],
           bpm: 0,
           key: '',
-          mood: '',
-          instruments: [],
-          language: '',
-          year: new Date().getFullYear().toString(),
-          isrc: '',
-          upc: '',
-          publisher: '',
-          copyright: '',
-          recordingLocation: '',
-          recordingDate: new Date().toISOString(),
-          producer: '',
-          engineer: '',
-          mixer: '',
-          masteringEngineer: '',
-          notes: description.trim()
+          duration: 0
         }
       };
 
-      console.log('Creating project with data:', newSong);
-      const createdSong = await createSong(tripId, newSong);
-      console.log('Project created successfully:', createdSong);
-
+      const createdSong = await createSong(tripId, songData);
+      
       setSuccess('Project created successfully!');
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-    } catch (err) {
-      console.error('Error creating project:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create project');
+      if (onProjectCreated) {
+        onProjectCreated(createdSong);
+      }
+      onClose();
+    } catch (error) {
+      console.error('Error creating project:', error);
+      setError('Failed to create project. Please try again.');
     } finally {
       setIsCreating(false);
-      setUploadProgress({});
     }
   };
 
-  return (
+  const renderContent = () => (
     <Box sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
       <Typography variant="h5" gutterBottom>
-        Create New Project
+        {mode === 'project' ? 'Create New Project' : 'Add New Song'}
       </Typography>
 
       {error && (
@@ -241,16 +232,18 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({ onClose, tripId }
           />
         </Grid>
 
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            multiline
-            rows={3}
-          />
-        </Grid>
+        {mode === 'project' && (
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              multiline
+              rows={3}
+            />
+          </Grid>
+        )}
 
         <Grid item xs={12}>
           <TextField
@@ -450,25 +443,40 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({ onClose, tripId }
             </Box>
           )}
         </Grid>
-
-        <Grid item xs={12}>
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
-            <Button onClick={onClose} disabled={isCreating}>
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleCreateProject}
-              disabled={isCreating || !title.trim()}
-              startIcon={isCreating ? <CircularProgress size={20} /> : null}
-            >
-              {isCreating ? 'Creating...' : 'Create Project'}
-            </Button>
-          </Box>
-        </Grid>
       </Grid>
+
+      <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+        <Button onClick={onClose} variant="outlined">
+          Cancel
+        </Button>
+        <Button
+          onClick={handleCreateProject}
+          variant="contained"
+          disabled={isCreating || !title.trim()}
+        >
+          {isCreating ? 'Creating...' : mode === 'project' ? 'Create Project' : 'Add Song'}
+        </Button>
+      </Box>
     </Box>
   );
+
+  if (isDialog) {
+    return (
+      <Dialog
+        open={true}
+        onClose={onClose}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>{mode === 'project' ? 'Create New Project' : 'Add New Song'}</DialogTitle>
+        <DialogContent>
+          {renderContent()}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  return renderContent();
 };
 
 export default EmptyProjectPanel; 

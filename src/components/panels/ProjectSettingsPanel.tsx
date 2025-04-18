@@ -1,16 +1,18 @@
 import { Box, Typography, Paper, TextField, Button, Switch, FormControlLabel, Divider } from '@mui/material';
 import { useState } from 'react';
-import { Trip } from '../../types';
+import { Trip } from '../../types/trip';
 
 interface ProjectSettingsPanelProps {
-  trip: Trip;
+  trip?: Trip;
   onClose: () => void;
 }
 
 const ProjectSettingsPanel = ({ trip, onClose }: ProjectSettingsPanelProps) => {
+  const isCreating = !trip;
+  
   const [settings, setSettings] = useState({
-    name: trip.name,
-    description: trip.description || '',
+    name: trip?.name || '',
+    description: trip?.description || '',
     isPrivate: true,
     allowComments: true,
     enableVersioning: true,
@@ -25,7 +27,9 @@ const ProjectSettingsPanel = ({ trip, onClose }: ProjectSettingsPanelProps) => {
   return (
     <Box sx={{ width: '100%', height: '100%', p: 3 }}>
       <Paper sx={{ p: 3, maxWidth: 800, margin: '0 auto' }}>
-        <Typography variant="h5" gutterBottom>Project Settings</Typography>
+        <Typography variant="h5" gutterBottom>
+          {isCreating ? 'Create New Project' : 'Project Settings'}
+        </Typography>
 
         {/* Basic Settings */}
         <Box sx={{ mb: 4 }}>
@@ -36,6 +40,7 @@ const ProjectSettingsPanel = ({ trip, onClose }: ProjectSettingsPanelProps) => {
               value={settings.name}
               onChange={(e) => setSettings({ ...settings, name: e.target.value })}
               fullWidth
+              required
             />
             <TextField
               label="Description"
@@ -108,7 +113,7 @@ const ProjectSettingsPanel = ({ trip, onClose }: ProjectSettingsPanelProps) => {
             Cancel
           </Button>
           <Button variant="contained" onClick={handleSave}>
-            Save Changes
+            {isCreating ? 'Create Project' : 'Save Changes'}
           </Button>
         </Box>
       </Paper>

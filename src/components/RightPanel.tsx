@@ -37,38 +37,35 @@ const RightPanel = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Avatar
             sx={{ width: 100, height: 100, mb: 2 }}
-            src={currentUser.photoURL || undefined}
+            src={artistProfile?.photoURL || currentUser?.photoURL || undefined}
           >
-            {artistProfile.displayName?.[0] || currentUser.email?.[0]}
+            {artistProfile?.name?.[0] || currentUser?.email?.[0]}
           </Avatar>
           <Typography variant="h6" gutterBottom>
-            {artistProfile.displayName}
+            {artistProfile?.name}
           </Typography>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            {currentUser.email}
+            {currentUser?.email}
           </Typography>
-          {artistProfile.bio && (
+          {artistProfile?.bio && (
             <Typography variant="body2" sx={{ textAlign: 'center', mb: 2 }}>
               {artistProfile.bio}
             </Typography>
           )}
-          {artistProfile.genres && artistProfile.genres.length > 0 && (
+          {artistProfile?.genre && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2, justifyContent: 'center' }}>
-              {artistProfile.genres.map((genre) => (
-                <Typography
-                  key={genre}
-                  variant="caption"
-                  sx={{
-                    bgcolor: 'primary.main',
-                    color: 'primary.contrastText',
-                    px: 1,
-                    py: 0.5,
-                    borderRadius: 1,
-                  }}
-                >
-                  {genre}
-                </Typography>
-              ))}
+              <Typography
+                variant="caption"
+                sx={{
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 1,
+                }}
+              >
+                {artistProfile.genre}
+              </Typography>
             </Box>
           )}
           <Button

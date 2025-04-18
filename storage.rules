@@ -5,14 +5,47 @@ rules_version = '2';
 //    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
-    match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
     }
     
-    match /trips/{tripId}/{allPaths=**} {
-      allow read, write: if request.auth != null && 
-        exists(/databases/(default)/documents/trips/$(tripId)) &&
-        get(/databases/(default)/documents/trips/$(tripId)).data.userId == request.auth.uid;
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Default rule - deny all access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+    
+    // Allow access to music files for authenticated users
+    match /music-files/{tripId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // Allow access to cover art for authenticated users
+    match /cover-art/{tripId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // Allow access to shared drive files for authenticated users
+    match /shared-drive/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // Allow access to notion templates for authenticated users
+    match /notion-templates/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    
+    // Allow access to user-specific files
+    match /users/{userId}/{fileName} {
+      allow read, write: if isOwner(userId);
     }
   }
 }

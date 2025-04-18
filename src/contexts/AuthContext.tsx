@@ -1,15 +1,12 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  User,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  AuthError
-} from 'firebase/auth';
+import { User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth } from '../firebase/config';
-import { createArtistProfile, getArtistProfile, ArtistProfile } from '../services/artistService';
 import { Box, CircularProgress } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import { ArtistProfile } from '../types/artist';
+import { getArtistProfile, updateArtistProfile } from '../services/artistService';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -18,147 +15,148 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (data: Partial<ArtistProfile>) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({} as AuthContextType);
+const AuthContext = createContext<AuthContextType>({
+  currentUser: null,
+  artistProfile: null,
+  loading: true,
+  login: async () => {},
+  signup: async () => {},
+  logout: async () => {},
+  updateProfile: async () => {}
+});
 
 export const useAuth = () => useContext(AuthContext);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [artistProfile, setArtistProfile] = useState<ArtistProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  const handleUserAuth = async (user: User | null) => {
-    if (user) {
-      try {
-        console.log('Checking for existing artist profile for user:', user.uid);
-        // Check if artist profile exists
-        let profile = await getArtistProfile(user.uid);
-        
-        if (profile) {
-          console.log('Found existing artist profile:', profile);
-        } else {
-          console.log('No existing artist profile found, creating new one');
-          // If no profile exists, create one
-          profile = await createArtistProfile(user.uid, user.email || '', user.displayName || undefined);
-          console.log('Created new artist profile:', profile);
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(handleUserAuth);
+    return unsubscribe;
+  }, []);
+
+  const handleUserAuth = async (authUser: User | null) => {
+    if (authUser) {
+      const artistProfileRef = doc(db, 'artists', authUser.uid);
+      const artistProfileSnap = await getDoc(artistProfileRef);
+
+      if (!artistProfileSnap.exists()) {
+        const defaultName = authUser.email?.split('@')[0] || 'Anonymous Artist';
+        const now = new Date();
+        const newArtistProfile: ArtistProfile = {
+          id: authUser.uid,
+          userId: authUser.uid,
+          name: defaultName,
+          email: authUser.email || '',
+          bio: '',
+          genre: '',
+          location: '',
+          socialLinks: {},
+          photoURL: authUser.photoURL || undefined,
+          coverImage: undefined,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await setDoc(artistProfileRef, {
+          ...newArtistProfile,
+          createdAt: Timestamp.fromDate(now),
+          updatedAt: Timestamp.fromDate(now),
+        });
+        setArtistProfile(newArtistProfile);
+      } else {
+        const data = artistProfileSnap.data();
+        if (data) {
+          const profile: ArtistProfile = {
+            id: data.id || authUser.uid,
+            userId: data.userId || authUser.uid,
+            name: data.name || authUser.email?.split('@')[0] || 'Anonymous Artist',
+            email: data.email || authUser.email || '',
+            bio: data.bio || '',
+            genre: data.genre || '',
+            location: data.location || '',
+            socialLinks: data.socialLinks || {},
+            photoURL: data.photoURL,
+            coverImage: data.coverImage,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+          };
+          setArtistProfile(profile);
         }
-        
-        setArtistProfile(profile);
-        console.log('Artist profile set in state:', profile);
-      } catch (error) {
-        console.error('Error handling artist profile:', error);
       }
+      setCurrentUser(authUser);
     } else {
-      console.log('No user, clearing artist profile');
+      setCurrentUser(null);
       setArtistProfile(null);
     }
+    setLoading(false);
   };
 
   const login = async (email: string, password: string) => {
-    console.log('Attempting to login with:', email);
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('Login successful:', userCredential.user);
-      await handleUserAuth(userCredential.user);
-    } catch (error) {
-      console.error('Login error:', error);
-      const authError = error as AuthError;
-      switch (authError.code) {
-        case 'auth/invalid-email':
-          throw new Error('Invalid email address');
-        case 'auth/user-disabled':
-          throw new Error('This account has been disabled');
-        case 'auth/user-not-found':
-          throw new Error('No account found with this email');
-        case 'auth/wrong-password':
-          throw new Error('Incorrect password');
-        case 'auth/too-many-requests':
-          throw new Error('Too many failed login attempts. Please try again later');
-        case 'auth/network-request-failed':
-          throw new Error('Network error. Please check your internet connection');
-        default:
-          console.error('Unexpected error code:', authError.code);
-          throw new Error('Failed to sign in. Please try again');
+    await signInWithEmailAndPassword(auth, email, password);
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      const profileData = await getArtistProfile(currentUser.uid);
+      if (profileData) {
+        const profile: ArtistProfile = {
+          id: currentUser.uid,
+          userId: currentUser.uid,
+          name: profileData.name || currentUser.email?.split('@')[0] || 'Anonymous Artist',
+          email: profileData.email || currentUser.email || '',
+          bio: profileData.bio || '',
+          genre: profileData.genre || '',
+          location: profileData.location || '',
+          socialLinks: profileData.socialLinks || {},
+          photoURL: profileData.photoURL,
+          coverImage: profileData.coverImage,
+          createdAt: profileData.createdAt || new Date(),
+          updatedAt: profileData.updatedAt || new Date(),
+        };
+        setArtistProfile(profile);
       }
     }
   };
 
   const signup = async (email: string, password: string) => {
-    console.log('Attempting to signup with:', email);
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      console.log('Signup successful:', userCredential.user);
-      await handleUserAuth(userCredential.user);
-    } catch (error) {
-      console.error('Signup error:', error);
-      const authError = error as AuthError;
-      switch (authError.code) {
-        case 'auth/email-already-in-use':
-          throw new Error('Email already in use');
-        case 'auth/invalid-email':
-          throw new Error('Invalid email address');
-        case 'auth/operation-not-allowed':
-          throw new Error('Email/password accounts are not enabled');
-        case 'auth/weak-password':
-          throw new Error('Password is too weak (minimum 6 characters)');
-        case 'auth/network-request-failed':
-          throw new Error('Network error. Please check your internet connection');
-        default:
-          console.error('Unexpected error code:', authError.code);
-          throw new Error('Failed to create account. Please try again');
-      }
-    }
+    await createUserWithEmailAndPassword(auth, email, password);
   };
 
   const logout = async () => {
-    try {
-      await signOut(auth);
-      console.log('Logout successful');
-      setArtistProfile(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-      throw new Error('Failed to sign out');
-    }
+    await signOut(auth);
+    navigate('/login');
   };
 
-  useEffect(() => {
-    console.log('Setting up auth state listener');
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('Auth state changed:', user ? 'User logged in' : 'No user');
-      setCurrentUser(user);
-      await handleUserAuth(user);
-      setLoading(false);
-    }, (error) => {
-      console.error('Auth state listener error:', error);
-      setLoading(false);
+  const updateProfile = async (data: Partial<ArtistProfile>) => {
+    if (!currentUser) return;
+    
+    // Add timestamp to the update data
+    const updateData = {
+      ...data,
+      updatedAt: new Date()
+    };
+    
+    // Update in database
+    await updateArtistProfile(currentUser.uid, updateData);
+    
+    // Update local state
+    setArtistProfile((prev: ArtistProfile | null) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        ...updateData
+      };
     });
-
-    return unsubscribe;
-  }, []);
-
-  const value = {
-    currentUser,
-    artistProfile,
-    loading,
-    login,
-    signup,
-    logout
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ currentUser, artistProfile, loading, login, signup, logout, updateProfile }}>
       {loading ? (
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            height: '100vh',
-            bgcolor: 'background.default'
-          }}
-        >
+        <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
           <CircularProgress />
         </Box>
       ) : (

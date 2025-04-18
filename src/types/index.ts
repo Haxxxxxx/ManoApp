@@ -11,42 +11,27 @@ export interface Trip {
     };
   };
   songs: Song[];
+  coverImage?: string;
+  collaborators?: string[];
+  tags?: string[];
 }
 
 export interface Song {
   id: string;
   title: string;
-  description: string;
-  userId: string;
-  tripId: string;
-  createdAt: string;
-  updatedAt: string;
+  artist: string;
+  duration: string;
   filePath: string;
-  imagePath: string;
-  videoPath: string;
-  metadata: {
-    lyrics: string;
-    duration: string;
-    style: string;
-    tags: string[];
-    feats: string[];
-    genre: string[];
-    bpm: number;
-    key: string;
-    mood: string;
-    instruments: string[];
-    language: string;
-    year: string;
-    isrc: string;
-    upc: string;
-    publisher: string;
-    copyright: string;
-    recordingLocation: string;
-    recordingDate: string;
-    producer: string;
-    engineer: string;
-    mixer: string;
-    masteringEngineer: string;
-    notes: string;
+  imagePath?: string;
+  projectPath?: string;
+  userId: string;
+  metadata?: {
+    bpm?: number;
+    key?: string;
+    genre?: string[];
+    tags?: string[];
+    releaseDate?: string;
+    source?: 'local' | 'remote' | 'upload';
   };
+  notes?: string;
 } 
