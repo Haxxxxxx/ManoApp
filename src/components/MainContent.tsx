@@ -30,6 +30,7 @@ import DynamicPanel from './panels/DynamicPanel';
 import { alpha } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { getPanelProps, panelRegistry } from './panels/panelRegistry';
 
 // Import panels
 import ExportSettingsPanel from './panels/ExportSettingsPanel';
@@ -146,23 +147,111 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       setError(null);
       
       try {
-        // Check if this is a local file trip
+        // Check if this is a local songs project
+        if (selectedTrip === 'local-songs-project') {
+          // Get local files from localStorage
+          const savedLocalFiles = localStorage.getItem('localFiles');
+          if (savedLocalFiles) {
+            const localFiles = JSON.parse(savedLocalFiles);
+            
+            // Create a project from all local files
+            const localProject: Trip = {
+              id: selectedTrip,
+              name: 'Local Songs',
+              description: 'Collection of local audio files',
+              userId: 'local',
+              songs: localFiles,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              collaborators: [],
+              tags: ['local-files'],
+              status: 'draft' as const,
+              type: 'project'
+            };
+            
+            setTripData(localProject);
+            setTripName(localProject.name);
+            setSongs(localFiles);
+            
+            // Check if we need to select a specific song
+            const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
+            if (songMatch && songMatch[1]) {
+              const songId = songMatch[1];
+              const song = localFiles.find((s: Song) => s.id === songId);
+              if (song) {
+                setSelectedSong(song);
+                // Ensure the song details panel is visible
+                setActivePanel('song-management');
+              }
+            }
+            
+            setIsLoading(false);
+            return;
+          }
+        }
+        
+        // Check if this is a local file project
         const searchParams = new URLSearchParams(window.location.search);
         const isLocalFile = searchParams.get('source') === 'local';
         
         if (isLocalFile) {
-          // Get local file data from sessionStorage
-          const currentLocalTrip = sessionStorage.getItem('currentLocalTrip');
-          if (currentLocalTrip) {
-            const trip = JSON.parse(currentLocalTrip);
-            if (trip.id === selectedTrip) {
-              setTripData(trip);
-              setTripName(trip.name);
-              setSongs(trip.songs);
+          // Get local project data from sessionStorage
+          const currentLocalProject = sessionStorage.getItem('currentLocalProject');
+          if (currentLocalProject) {
+            const project = JSON.parse(currentLocalProject);
+            if (project.id === selectedTrip) {
+              setTripData(project);
+              setTripName(project.name);
+              setSongs(project.songs || []);
+
+              // Check if we need to select a specific song
+              const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
+              if (songMatch && songMatch[1]) {
+                const songId = songMatch[1];
+                const song = project.songs.find((s: Song) => s.id === songId);
+                if (song) {
+                  setSelectedSong(song);
+                  // Ensure the song details panel is visible
+                  setActivePanel('song-management');
+                }
+              }
+              setIsLoading(false);
               return;
             }
           }
-          setError('Local file data not found');
+
+          // If we can't find the project in sessionStorage, try localStorage
+          const savedLocalFiles = localStorage.getItem('localFiles');
+          if (savedLocalFiles) {
+            const localFiles = JSON.parse(savedLocalFiles);
+            const song = localFiles.find((s: Song) => `local-${s.id}` === selectedTrip);
+            if (song) {
+              // Create a project from the local file
+              const localProject: Trip = {
+                id: selectedTrip,
+                name: song.title,
+                description: `Project created from local file: ${song.title}`,
+                userId: 'local',
+                songs: [song],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                collaborators: [],
+                tags: ['local-file'],
+                status: 'draft' as const,
+                type: 'project'
+              };
+              setTripData(localProject);
+              setTripName(localProject.name);
+              setSongs([song]);
+              setSelectedSong(song);
+              // Store the project in sessionStorage for future access
+              sessionStorage.setItem('currentLocalProject', JSON.stringify(localProject));
+              setIsLoading(false);
+              return;
+            }
+          }
+
+          setError('Local project data not found');
           setTripData(null);
           setTripName('');
           setSongs([]);
@@ -173,27 +262,30 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
 
         // Handle regular Firebase trip
         const trip = await getTrip(selectedTrip);
-        if (trip) {
-          setTripData(trip);
-          setTripName(trip.name);
-          const tripSongs = await getSongs(selectedTrip);
-          setSongs(tripSongs);
-        } else {
-          setError('Trip not found');
-          setTripData(null);
-          setTripName('');
-          setSongs([]);
-          setSelectedSong(null);
-          navigate('/');
+        if (!trip) {
+          throw new Error('Trip not found');
+        }
+
+        setTripData(trip);
+        setTripName(trip.name);
+        setSongs(trip.songs || []);
+
+        // Check if we need to select a specific song
+        const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
+        if (songMatch && songMatch[1]) {
+          const songId = songMatch[1];
+          const song = trip.songs?.find(s => s.id === songId);
+          if (song) {
+            setSelectedSong(song);
+          }
         }
       } catch (error) {
         console.error('Error fetching trip data:', error);
-        setError('Failed to load trip data. Please try again.');
+        setError(error instanceof Error ? error.message : 'Failed to load project data');
         setTripData(null);
         setTripName('');
         setSongs([]);
         setSelectedSong(null);
-        navigate('/');
       } finally {
         setIsLoading(false);
       }
@@ -560,14 +652,6 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
   };
 
   const renderActivePanel = () => {
-    if (showSettings) {
-      return (
-        <Suspense fallback={<LoadingPanel />}>
-          <SettingsPanel onClose={() => setShowSettings(false)} />
-        </Suspense>
-      );
-    }
-
     if (isCreatingProject) {
       return (
         <Suspense fallback={<LoadingPanel />}>
@@ -586,13 +670,15 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
     }
 
     return (
-      <DynamicPanel
-        panelType={activePanel}
-        tripData={tripData}
-        songs={songs}
-        selectedTrip={selectedTrip}
-        onClose={handleClosePanel}
-      />
+      <Suspense fallback={<LoadingPanel />}>
+        <DynamicPanel
+          panelType={activePanel}
+          tripData={tripData}
+          songs={songs}
+          selectedTrip={selectedTrip}
+          onClose={handleClosePanel}
+        />
+      </Suspense>
     );
   };
 

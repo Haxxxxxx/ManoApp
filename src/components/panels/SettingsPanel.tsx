@@ -26,6 +26,15 @@ import {
   alpha,
   LinearProgress,
   Slider,
+  InputAdornment,
+  Grid,
+  Card,
+  CardContent,
+  Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -38,10 +47,19 @@ import {
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
+  ColorLens as ColorLensIcon,
+  DarkMode as DarkModeIcon,
+  TextFields as TextFieldsIcon,
+  Animation as AnimationIcon,
+  BorderAll as BorderRadiusIcon,
+  SpaceBar as SpaceBarIcon,
+  FontDownload as FontDownloadIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateUserProfile, deleteAccount } from '../../services/firebaseService';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { useThemeSettings, ThemeSettings } from '../../contexts/ThemeContext';
+import { ChromePicker, ColorResult } from 'react-color';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -90,33 +108,20 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
     photoURL: artistProfile?.photoURL || currentUser?.photoURL || '',
     socialLinks: artistProfile?.socialLinks || {},
   });
-  const [settings, setSettings] = useState({
-    primaryColor: '#1DB954', // Default Spotify green
-    darkMode: true,
-    fontSize: 16,
-    animations: true,
-  });
+  const { settings, updateSettings } = useThemeSettings();
+  const [localSettings, setLocalSettings] = useState<ThemeSettings>(settings);
+  const [showPrimaryColorPicker, setShowPrimaryColorPicker] = useState(false);
+  const [showSecondaryColorPicker, setShowSecondaryColorPicker] = useState(false);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
 
   const handleProfileChange = (field: string) => (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (field === 'socialLinks') {
-      const [platform, value] = event.target.value.split(':');
-      setProfileData({
-        ...profileData,
-        socialLinks: {
-          ...profileData.socialLinks,
-          [platform]: value
-        }
-      });
-    } else {
-      setProfileData({
-        ...profileData,
-        [field]: event.target.value,
-      });
-    }
+    setProfileData({
+      ...profileData,
+      [field]: event.target.value,
+    });
   };
 
   const handleSaveProfile = async () => {
@@ -126,13 +131,13 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
     setError(null);
     
     try {
-      await updateUserProfile(currentUser.uid, profileData);
-      await updateProfile();
-      setSuccess('Profile updated successfully');
+      await updateProfile(profileData);
       setEditingProfile(false);
+      setSuccess('Profile updated successfully');
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error('Error updating profile:', err);
-      setError('Failed to update profile. Please try again.');
+      setError('Failed to update profile');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -146,103 +151,498 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
     
     try {
       await deleteAccount(currentUser.uid);
-      // The AuthContext will handle the sign out
-    } catch (err) {
-      console.error('Error deleting account:', err);
-      setError('Failed to delete account. Please try again.');
-    } finally {
-      setLoading(false);
       setDeleteConfirmOpen(false);
+      // Redirect will be handled by AuthContext
+    } catch (err) {
+      setError('Failed to delete account');
+      console.error(err);
+      setLoading(false);
     }
   };
 
-  const handleSave = () => {
-    // Create a new theme with the updated primary color
-    const newTheme = createTheme({
-      ...theme,
-      palette: {
-        ...theme.palette,
-        primary: {
-          main: settings.primaryColor,
-          light: `${settings.primaryColor}99`, // Add transparency for light variant
-          dark: `${settings.primaryColor}CC`, // Add transparency for dark variant
-          contrastText: '#FFFFFF',
-        },
-      },
+  const handleSettingChange = (key: keyof ThemeSettings, value: any) => {
+    setLocalSettings({
+      ...localSettings,
+      [key]: value,
     });
+  };
 
-    // TODO: Implement theme persistence
-    // For now, we'll just log the changes
-    console.log('New theme:', newTheme);
-    onClose();
+  const handleSave = async () => {
+    try {
+      await updateSettings(localSettings);
+      setSuccess('Settings saved successfully');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError('Failed to save settings');
+      console.error(err);
+    }
+  };
+
+  const handleCancel = () => {
+    setLocalSettings(settings);
+  };
+
+  const fontFamilies = [
+    'Roboto, Arial, sans-serif',
+    'Open Sans, Arial, sans-serif',
+    'Lato, Arial, sans-serif',
+    'Montserrat, Arial, sans-serif',
+    'Poppins, Arial, sans-serif',
+    'Source Sans Pro, Arial, sans-serif',
+    'Raleway, Arial, sans-serif',
+    'Ubuntu, Arial, sans-serif',
+  ];
+
+  const handlePrimaryColorChange = (color: ColorResult) => {
+    handleSettingChange('primaryColor', color.hex);
+  };
+
+  const handleSecondaryColorChange = (color: ColorResult) => {
+    handleSettingChange('secondaryColor', color.hex);
   };
 
   return (
-    <Box sx={{ width: '100%', height: '100%', p: 3 }}>
-      <Paper sx={{ p: 3, maxWidth: 800, margin: '0 auto' }}>
-        <Typography variant="h5" gutterBottom>
-          Settings
-        </Typography>
-
-        {/* Theme Settings */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" gutterBottom>Theme Settings</Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box>
-              <Typography gutterBottom>Primary Color</Typography>
-              <TextField
-                type="color"
-                value={settings.primaryColor}
-                onChange={(e) => setSettings({ ...settings, primaryColor: e.target.value })}
-                sx={{ width: '100%' }}
-              />
-            </Box>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.darkMode}
-                  onChange={(e) => setSettings({ ...settings, darkMode: e.target.checked })}
-                />
-              }
-              label="Dark Mode"
-            />
-            <Box>
-              <Typography gutterBottom>Font Size</Typography>
-              <Slider
-                value={settings.fontSize}
-                onChange={(_, value) => setSettings({ ...settings, fontSize: value as number })}
-                min={12}
-                max={20}
-                step={1}
-                marks
-                valueLabelDisplay="auto"
-              />
-            </Box>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.animations}
-                  onChange={(e) => setSettings({ ...settings, animations: e.target.checked })}
-                />
-              }
-              label="Enable Animations"
-            />
-          </Box>
+    <>
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          maxHeight: '100vh',
+          position: 'relative'
+        }}
+      >
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          bgcolor: 'background.paper',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1
+        }}>
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange} 
+            aria-label="settings tabs"
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab icon={<PersonIcon />} label="Profile" />
+            <Tab icon={<PaletteIcon />} label="Theme" />
+            <Tab icon={<SecurityIcon />} label="Security" />
+            <Tab icon={<StorageIcon />} label="Storage" />
+          </Tabs>
         </Box>
 
-        <Divider sx={{ my: 3 }} />
+        {error && (
+          <Alert severity="error" sx={{ m: 2 }}>
+            {error}
+          </Alert>
+        )}
 
-        {/* Action Buttons */}
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-          <Button variant="outlined" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={handleSave}>
-            Save Changes
-          </Button>
+        {success && (
+          <Alert severity="success" sx={{ m: 2 }}>
+            {success}
+          </Alert>
+        )}
+
+        <Box sx={{ 
+          flexGrow: 1, 
+          overflow: 'auto',
+          height: '100%'
+        }}>
+          <TabPanel value={activeTab} index={0}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="h5" gutterBottom>
+                Profile Settings
+              </Typography>
+              
+              {loading && <LinearProgress />}
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Name"
+                    value={profileData.name}
+                    onChange={handleProfileChange('name')}
+                    disabled={!editingProfile}
+                    variant="outlined"
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Genre"
+                    value={profileData.genre}
+                    onChange={handleProfileChange('genre')}
+                    disabled={!editingProfile}
+                    variant="outlined"
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Bio"
+                    value={profileData.bio}
+                    onChange={handleProfileChange('bio')}
+                    disabled={!editingProfile}
+                    multiline
+                    rows={4}
+                    variant="outlined"
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Location"
+                    value={profileData.location}
+                    onChange={handleProfileChange('location')}
+                    disabled={!editingProfile}
+                    variant="outlined"
+                  />
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2, gap: 1 }}>
+                {!editingProfile ? (
+                  <Button
+                    variant="contained"
+                    startIcon={<EditIcon />}
+                    onClick={() => setEditingProfile(true)}
+                  >
+                    Edit Profile
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outlined"
+                      startIcon={<CancelIcon />}
+                      onClick={() => {
+                        setEditingProfile(false);
+                        setProfileData({
+                          name: artistProfile?.name || '',
+                          bio: artistProfile?.bio || '',
+                          genre: artistProfile?.genre || '',
+                          location: artistProfile?.location || '',
+                          photoURL: artistProfile?.photoURL || currentUser?.photoURL || '',
+                          socialLinks: artistProfile?.socialLinks || {},
+                        });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="contained"
+                      startIcon={<SaveIcon />}
+                      onClick={handleSaveProfile}
+                      disabled={loading}
+                    >
+                      Save
+                    </Button>
+                  </>
+                )}
+              </Box>
+              
+              <Divider sx={{ my: 3 }} />
+              
+              <Typography variant="h6" gutterBottom>
+                Danger Zone
+              </Typography>
+              
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteIcon />}
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                Delete Account
+              </Button>
+            </Box>
+          </TabPanel>
+
+          <TabPanel value={activeTab} index={1}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Typography variant="h5" gutterBottom>
+                Theme Settings
+              </Typography>
+              
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        <ColorLensIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        Colors
+                      </Typography>
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Primary Color
+                        </Typography>
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            gap: 2,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 1,
+                              bgcolor: localSettings.primaryColor,
+                              border: `1px solid ${theme.palette.divider}`,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => setShowPrimaryColorPicker(!showPrimaryColorPicker)}
+                          />
+                          <TextField
+                            fullWidth
+                            value={localSettings.primaryColor}
+                            onChange={(e) => handleSettingChange('primaryColor', e.target.value)}
+                            variant="outlined"
+                            size="small"
+                          />
+                        </Box>
+                        {showPrimaryColorPicker && (
+                          <Box sx={{ mt: 2, position: 'relative', zIndex: 1 }}>
+                            <ChromePicker
+                              color={localSettings.primaryColor}
+                              onChange={handlePrimaryColorChange}
+                            />
+                          </Box>
+                        )}
+                      </Box>
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Secondary Color
+                        </Typography>
+                        <Box 
+                          sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            gap: 2,
+                          }}
+                        >
+                          <Box
+                            sx={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 1,
+                              bgcolor: localSettings.secondaryColor,
+                              border: `1px solid ${theme.palette.divider}`,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => setShowSecondaryColorPicker(!showSecondaryColorPicker)}
+                          />
+                          <TextField
+                            fullWidth
+                            value={localSettings.secondaryColor}
+                            onChange={(e) => handleSettingChange('secondaryColor', e.target.value)}
+                            variant="outlined"
+                            size="small"
+                          />
+                        </Box>
+                        {showSecondaryColorPicker && (
+                          <Box sx={{ mt: 2, position: 'relative', zIndex: 1 }}>
+                            <ChromePicker
+                              color={localSettings.secondaryColor}
+                              onChange={handleSecondaryColorChange}
+                            />
+                          </Box>
+                        )}
+                      </Box>
+                      
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={localSettings.darkMode}
+                            onChange={(e) => handleSettingChange('darkMode', e.target.checked)}
+                            color="primary"
+                          />
+                        }
+                        label="Dark Mode"
+                      />
+                    </CardContent>
+                  </Card>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        <TextFieldsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        Typography
+                      </Typography>
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Font Family
+                        </Typography>
+                        <FormControl fullWidth variant="outlined" size="small">
+                          <InputLabel id="font-family-label">Font Family</InputLabel>
+                          <Select
+                            labelId="font-family-label"
+                            value={localSettings.fontFamily}
+                            onChange={(e) => handleSettingChange('fontFamily', e.target.value)}
+                            label="Font Family"
+                          >
+                            {fontFamilies.map((font) => (
+                              <MenuItem key={font} value={font} style={{ fontFamily: font }}>
+                                {font.split(',')[0]}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Font Size: {localSettings.fontSize}px
+                        </Typography>
+                        <Slider
+                          value={localSettings.fontSize}
+                          onChange={(_, value) => handleSettingChange('fontSize', value)}
+                          min={10}
+                          max={20}
+                          step={1}
+                          marks
+                          valueLabelDisplay="auto"
+                        />
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        <BorderRadiusIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        Layout
+                      </Typography>
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Border Radius: {localSettings.borderRadius}px
+                        </Typography>
+                        <Slider
+                          value={localSettings.borderRadius}
+                          onChange={(_, value) => handleSettingChange('borderRadius', value)}
+                          min={0}
+                          max={16}
+                          step={1}
+                          marks
+                          valueLabelDisplay="auto"
+                        />
+                      </Box>
+                      
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                          Spacing: {localSettings.spacing}px
+                        </Typography>
+                        <Slider
+                          value={localSettings.spacing}
+                          onChange={(_, value) => handleSettingChange('spacing', value)}
+                          min={4}
+                          max={16}
+                          step={1}
+                          marks
+                          valueLabelDisplay="auto"
+                        />
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Card variant="outlined" sx={{ height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="h6" gutterBottom>
+                        <AnimationIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        Effects
+                      </Typography>
+                      
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={localSettings.animations}
+                            onChange={(e) => handleSettingChange('animations', e.target.checked)}
+                            color="primary"
+                          />
+                        }
+                        label="Enable Animations"
+                      />
+                      
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        Animations make the interface feel more responsive and engaging.
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2, gap: 1 }}>
+                <Button
+                  variant="outlined"
+                  onClick={handleCancel}
+                >
+                  Reset
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleSave}
+                >
+                  Apply Theme
+                </Button>
+              </Box>
+            </Box>
+          </TabPanel>
+
+          <TabPanel value={activeTab} index={2}>
+            <Typography variant="h5" gutterBottom>
+              Security Settings
+            </Typography>
+            <Typography variant="body1" paragraph>
+              Security settings will be available in a future update.
+            </Typography>
+          </TabPanel>
+
+          <TabPanel value={activeTab} index={3}>
+            <Typography variant="h5" gutterBottom>
+              Storage Settings
+            </Typography>
+            <Typography variant="body1" paragraph>
+              Storage settings will be available in a future update.
+            </Typography>
+          </TabPanel>
         </Box>
       </Paper>
-    </Box>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+      >
+        <DialogTitle>Delete Account</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete your account? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+          <Button onClick={handleDeleteAccount} color="error" disabled={loading}>
+            {loading ? <CircularProgress size={24} /> : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 

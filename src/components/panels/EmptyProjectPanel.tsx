@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, MusicNote as MusicNoteIcon } from '@mui/icons-material';
 import { storageService } from '../../services/storageService';
-import { createSong } from '../../services/firebaseService';
+import { createSong, createTrip } from '../../services/firebaseService';
 import { Song } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -130,11 +130,6 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
       return;
     }
 
-    if (!tripId) {
-      setError('No trip selected');
-      return;
-    }
-
     setIsCreating(true);
     setError(null);
     setSuccess(null);
@@ -170,7 +165,7 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
         );
       }
 
-      // Create the song
+      // Create the song data
       const songData = {
         title,
         artist: artistProfile?.name || 'Unknown Artist',
@@ -188,7 +183,28 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
         }
       };
 
-      const createdSong = await createSong(tripId, songData);
+      let createdSong;
+      if (tripId === "new") {
+        // Create a new trip first
+        const newTrip = await createTrip({
+          name: title,
+          description: description || '',
+          userId: currentUser.uid,
+          songs: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          collaborators: [],
+          tags: [],
+          status: 'draft',
+          type: 'project'
+        });
+
+        // Then create the song with the new trip ID
+        createdSong = await createSong(newTrip.id, songData);
+      } else {
+        // Create song in existing trip
+        createdSong = await createSong(tripId, songData);
+      }
       
       setSuccess('Project created successfully!');
       if (onProjectCreated) {

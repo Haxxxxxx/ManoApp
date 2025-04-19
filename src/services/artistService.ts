@@ -1,5 +1,5 @@
 import { db } from '../firebase/config';
-import { collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, Firestore } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, Firestore, Timestamp } from 'firebase/firestore';
 import { ArtistProfile } from '../types/artist';
 
 const MAX_RETRIES = 3;
@@ -13,17 +13,19 @@ export const createArtistProfile = async (userId: string, profileData: Partial<A
   }
   
   const artistRef = doc(db, 'artists', userId);
+  const now = new Date();
+  
   const data = {
     ...profileData,
     userId,
-    createdAt: new Date(),
-    updatedAt: new Date()
+    createdAt: now,
+    updatedAt: now
   } as ArtistProfile;
   
   await setDoc(artistRef, {
     ...data,
-    createdAt: data.createdAt.toISOString(),
-    updatedAt: data.updatedAt.toISOString()
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now)
   });
   return data;
 };
@@ -86,8 +88,30 @@ export const updateArtistProfile = async (userId: string, profileData: any) => {
   }
   
   const artistRef = doc(db, 'artists', userId);
-  await updateDoc(artistRef, {
-    ...profileData,
-    updatedAt: new Date().toISOString()
+  
+  // Create a clean update object
+  const cleanData: Record<string, any> = {};
+  
+  // Process each field in the profile data
+  Object.entries(profileData).forEach(([key, value]) => {
+    // Handle Timestamp objects
+    if (value instanceof Timestamp) {
+      cleanData[key] = value;
+    } 
+    // Handle Date objects
+    else if (value instanceof Date) {
+      cleanData[key] = Timestamp.fromDate(value);
+    }
+    // Handle other values
+    else {
+      cleanData[key] = value;
+    }
   });
+  
+  // Ensure updatedAt is always a Timestamp
+  if (!cleanData.updatedAt) {
+    cleanData.updatedAt = Timestamp.fromDate(new Date());
+  }
+  
+  await updateDoc(artistRef, cleanData);
 }; 

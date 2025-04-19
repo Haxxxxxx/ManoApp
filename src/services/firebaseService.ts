@@ -207,23 +207,44 @@ export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
   }
 };
 
-export const getSongs = async (tripId: string) => {
+export const getSongsByTripId = async (tripId: string) => {
   try {
     const q = query(
       collection(db, songsCollection),
       where('tripId', '==', tripId),
       orderBy('createdAt', 'desc')
     );
-  const querySnapshot = await getDocs(q);
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  })) as Song[];
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Song[];
   } catch (error) {
     console.error('Error fetching songs:', error);
     throw error;
   }
 };
+
+export const getUserSongs = async (userId: string) => {
+  try {
+    const q = query(
+      collection(db, songsCollection),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Song[];
+  } catch (error) {
+    console.error('Error fetching user songs:', error);
+    throw error;
+  }
+};
+
+// Alias for backward compatibility
+export const getSongs = getSongsByTripId;
 
 export const getSong = async (songId: string) => {
   const docRef = doc(db, songsCollection, songId);
@@ -828,6 +849,128 @@ export const deleteAccount = async (userId: string): Promise<void> => {
     }
   } catch (error) {
     console.error('Error deleting account:', error);
+    throw error;
+  }
+};
+
+// Album types
+export interface AlbumSong {
+  id: string;
+  title: string;
+  artist: string;
+  duration: number;
+  filePath?: string;
+  metadata?: {
+    source?: 'local' | 'project' | 'firebase';
+    projectName?: string;
+    bpm?: number;
+    key?: string;
+    genre?: string[];
+    tags?: string[];
+    releaseDate?: string;
+    featuring?: string[];
+    lyrics?: string;
+    videoUrl?: string;
+  };
+}
+
+export interface Album {
+  id: string;
+  userId: string;
+  title: string;
+  artist: string;
+  releaseDate: string;
+  genre: string;
+  description: string;
+  coverImage: string | null;
+  selectedPlatforms: string[];
+  songs: AlbumSong[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Album functions
+export const createAlbum = async (album: Omit<Album, 'id' | 'createdAt' | 'updatedAt'>) => {
+  try {
+    const albumData = {
+      ...album,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    const docRef = await addDoc(collection(db, 'albums'), albumData);
+    return { ...albumData, id: docRef.id };
+  } catch (error) {
+    console.error('Error creating album:', error);
+    throw error;
+  }
+};
+
+export const getAlbums = async (userId: string) => {
+  try {
+    const q = query(
+      collection(db, 'albums'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Album[];
+  } catch (error) {
+    console.error('Error fetching albums:', error);
+    throw error;
+  }
+};
+
+export const getAlbum = async (albumId: string) => {
+  try {
+    const albumRef = doc(db, 'albums', albumId);
+    const albumDoc = await getDoc(albumRef);
+    
+    if (albumDoc.exists()) {
+      return {
+        id: albumDoc.id,
+        ...albumDoc.data()
+      } as Album;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting album:', error);
+    throw error;
+  }
+};
+
+export const updateAlbum = async (albumId: string, albumData: Partial<Album>) => {
+  try {
+    const docRef = doc(db, 'albums', albumId);
+    await updateDoc(docRef, {
+      ...albumData,
+      updatedAt: new Date().toISOString()
+    });
+    
+    const updatedDoc = await getDoc(docRef);
+    if (!updatedDoc.exists()) {
+      throw new Error('Album not found after update');
+    }
+    
+    return {
+      id: updatedDoc.id,
+      ...updatedDoc.data()
+    } as Album;
+  } catch (error) {
+    console.error('Error updating album:', error);
+    throw error;
+  }
+};
+
+export const deleteAlbum = async (albumId: string) => {
+  try {
+    const albumRef = doc(db, 'albums', albumId);
+    await deleteDoc(albumRef);
+  } catch (error) {
+    console.error('Error deleting album:', error);
     throw error;
   }
 }; 

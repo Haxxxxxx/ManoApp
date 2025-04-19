@@ -22,7 +22,10 @@ import {
   alpha,
   ListItemIcon,
   Chip,
-  Paper
+  Paper,
+  Collapse,
+  Drawer,
+  useMediaQuery,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AddIcon from '@mui/icons-material/Add';
@@ -31,7 +34,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTrips } from '../contexts/TripContext';
 import { createTrip } from '../services/firebaseService';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import FolderIcon from '@mui/icons-material/Folder';
 import PersonIcon from '@mui/icons-material/Person';
@@ -40,6 +43,11 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import EmptyProjectPanel from './panels/EmptyProjectPanel';
 import SettingsPanel from './panels/SettingsPanel';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import MenuIcon from '@mui/icons-material/Menu';
+import AlbumIcon from '@mui/icons-material/Album';
 
 interface SidebarProps {
   selectedTrip: string | null;
@@ -52,7 +60,12 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
   const { currentUser, artistProfile } = useAuth();
   const { trips, sharedTrips, loading, addTrip } = useTrips();
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [tripsExpanded, setTripsExpanded] = useState(true);
+  const [sharedTripsExpanded, setSharedTripsExpanded] = useState(true);
 
   const handleCreateTrip = async (song: any) => {
     if (!currentUser) return;
@@ -87,6 +100,9 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
   const handleTripClick = (tripId: string) => {
     onSelectTrip(tripId);
     navigate(`/trip/${tripId}`);
+    if (isMobile) {
+      setMobileOpen(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -98,317 +114,261 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
     }
   };
 
-  const handleProfileClick = () => {
-    navigate('/profile');
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
   };
 
+  const renderSidebarContent = () => (
+    <>
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
+        <img src={"/logoManoApp.png"} alt="ManoApp" style={{ width: 40, height: 40, marginRight: 10 }} />
+        <Typography variant="h6" fontWeight="bold">
+          ManoApp
+        </Typography>
+        {isMobile && (
+          <IconButton onClick={handleDrawerToggle}>
+            <MenuIcon />
+          </IconButton>
+        )}
+      </Box>
+      
+      <Divider />
+      
+      <List>
+        <ListItem disablePadding>
+          <ListItemButton 
+            selected={location.pathname === '/'}
+            onClick={() => navigate('/')}
+          >
+            <ListItemIcon>
+              <DashboardIcon />
+            </ListItemIcon>
+            <ListItemText primary="Dashboard" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            selected={location.pathname === '/albums'}
+            onClick={() => navigate('/albums')}
+          >
+            <ListItemIcon>
+              <AlbumIcon />
+            </ListItemIcon>
+            <ListItemText primary="Albums" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            selected={location.pathname === '/profile'}
+            onClick={() => navigate('/profile')}
+          >
+            <ListItemIcon>
+              <PersonIcon />
+            </ListItemIcon>
+            <ListItemText primary="Profile" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton onClick={() => setOpenSettings(true)}>
+            <ListItemIcon>
+              <SettingsIcon />
+            </ListItemIcon>
+            <ListItemText primary="Settings" />
+          </ListItemButton>
+        </ListItem>
+      </List>
+      
+      <Divider />
+      
+      <List>
+        <ListItem disablePadding>
+          <ListItemButton onClick={() => setTripsExpanded(!tripsExpanded)}>
+            <ListItemIcon>
+              <FolderIcon />
+            </ListItemIcon>
+            <ListItemText primary="My Projects" />
+            {tripsExpanded ? <ExpandLess /> : <ExpandMore />}
+          </ListItemButton>
+        </ListItem>
+        
+        <Collapse in={tripsExpanded} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding>
+            {loading ? (
+              <ListItem>
+                <CircularProgress size={24} />
+              </ListItem>
+            ) : trips.length === 0 ? (
+              <ListItem>
+                <ListItemText primary="No projects yet" />
+              </ListItem>
+            ) : (
+              trips.map((trip) => (
+                <ListItem key={trip.id} disablePadding>
+                  <ListItemButton 
+                    selected={selectedTrip === trip.id}
+                    onClick={() => handleTripClick(trip.id)}
+                    sx={{ pl: 4 }}
+                  >
+                    <ListItemText primary={trip.name} />
+                  </ListItemButton>
+                </ListItem>
+              ))
+            )}
+            
+            <ListItem disablePadding>
+              <ListItemButton 
+                onClick={() => setOpenDialog(true)}
+                sx={{ pl: 4 }}
+              >
+                <ListItemIcon>
+                  <AddIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primary="New Project" />
+              </ListItemButton>
+            </ListItem>
+          </List>
+        </Collapse>
+        
+        <ListItem disablePadding>
+          <ListItemButton onClick={() => setSharedTripsExpanded(!sharedTripsExpanded)}>
+            <ListItemIcon>
+              <FolderIcon />
+            </ListItemIcon>
+            <ListItemText primary="Shared Projects" />
+            {sharedTripsExpanded ? <ExpandLess /> : <ExpandMore />}
+          </ListItemButton>
+        </ListItem>
+        
+        <Collapse in={sharedTripsExpanded} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding>
+            {loading ? (
+              <ListItem>
+                <CircularProgress size={24} />
+              </ListItem>
+            ) : sharedTrips.length === 0 ? (
+              <ListItem>
+                <ListItemText primary="No shared projects" />
+              </ListItem>
+            ) : (
+              sharedTrips.map((trip) => (
+                <ListItem key={trip.id} disablePadding>
+                  <ListItemButton 
+                    selected={selectedTrip === trip.id}
+                    onClick={() => handleTripClick(trip.id)}
+                    sx={{ pl: 4 }}
+                  >
+                    <ListItemText primary={trip.name} />
+                  </ListItemButton>
+                </ListItem>
+              ))
+            )}
+          </List>
+        </Collapse>
+      </List>
+      
+      <Box sx={{ flexGrow: 1 }} />
+      
+      <Divider />
+      
+      <List>
+        <ListItem disablePadding>
+          <ListItemButton onClick={handleLogout}>
+            <ListItemIcon>
+              <LogoutIcon />
+            </ListItemIcon>
+            <ListItemText primary="Logout" />
+          </ListItemButton>
+        </ListItem>
+      </List>
+    </>
+  );
+
+  const drawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {renderSidebarContent()}
+    </Box>
+  );
+
   return (
-    <Box
-      sx={{
-        width: 280,
-        bgcolor: 'background.paper',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRight: `1px solid ${theme.palette.divider}`,
-        boxShadow: '0px 0px 20px rgba(0, 0, 0, 0.1)',
-        zIndex: 10,
-      }}
-    >
-      {/* User Profile Section */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          mb: 2,
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          '&:hover': {
-            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-            borderColor: 'primary.main',
+    <>
+      {isMobile ? (
+        <Drawer
+          variant="temporary"
+          anchor="left"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{
+            keepMounted: true, // Better open performance on mobile
+          }}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: 250,
+              minWidth: 250,
+              bgcolor: 'background.paper',
+            },
+          }}
+        >
+          {drawer}
+        </Drawer>
+      ) : (
+        <Paper
+          elevation={0}
+          sx={{
+            width: 250,
+            minWidth: 250,
+            height: '100%',
+            borderRight: `1px solid ${theme.palette.divider}`,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'sticky',
+            top: 0,
+            left: 0,
+          }}
+        >
+          {drawer}
+        </Paper>
+      )}
+      
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create New Project</DialogTitle>
+        <DialogContent>
+          <EmptyProjectPanel 
+            onProjectCreated={handleCreateTrip} 
+            onClose={() => setOpenDialog(false)}
+            tripId="new"
+          />
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog
+        open={openSettings}
+        onClose={() => setOpenSettings(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            height: '80vh',
+            maxHeight: '80vh',
           }
         }}
-        onClick={handleProfileClick}
       >
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: 2,
-          }}
-        >
-          <Avatar 
-            src={artistProfile?.photoURL || undefined} 
-            alt={artistProfile?.name || currentUser?.email || 'User'}
-            sx={{ 
-              width: 48, 
-              height: 48,
-              bgcolor: theme.palette.primary.main,
-            }}
-          >
-            <PersonIcon />
-          </Avatar>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {artistProfile?.name || currentUser?.email?.split('@')[0] || 'User'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {trips.length} {trips.length === 1 ? 'Project' : 'Projects'}
-            </Typography>
-          </Box>
-          <Tooltip title="Logout">
-            <IconButton 
-              onClick={handleLogout}
-              size="small"
-              sx={{ 
-                color: 'text.secondary',
-                '&:hover': { color: 'error.main' }
-              }}
-            >
-              <LogoutIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      </Paper>
-
-      {/* Create Project Button */}
-      <Box sx={{ p: 2 }}>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={() => setOpenDialog(true)}
-          fullWidth
-          sx={{ 
-            py: 1.5,
-            borderRadius: 2,
-            boxShadow: '0px 4px 12px rgba(29, 185, 84, 0.2)',
-            '&:hover': {
-              boxShadow: '0px 6px 16px rgba(29, 185, 84, 0.3)',
-            }
-          }}
-        >
-          Create Project
-        </Button>
-      </Box>
-
-      {/* Projects List */}
-      <Box 
-        sx={{ 
-          flexGrow: 1, 
-          overflow: 'auto',
-          px: 1,
-          py: 1,
-        }}
-      >
-        {/* Your Projects Section */}
-        <Typography 
-          variant="subtitle2" 
-          color="text.secondary" 
-          sx={{ 
-            px: 2, 
-            py: 1,
-            fontWeight: 500,
-            letterSpacing: 0.5,
-          }}
-        >
-          YOUR PROJECTS
-        </Typography>
-        
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress size={24} />
-          </Box>
-        ) : trips.length === 0 ? (
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              p: 4,
-              textAlign: 'center',
-              color: 'text.secondary',
-            }}
-          >
-            <FolderIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-            <Typography variant="body2">
-              No projects yet. Create your first project to get started.
-            </Typography>
-          </Box>
-        ) : (
-          <List sx={{ px: 1 }}>
-            {trips.map((trip) => (
-              <ListItem key={trip.id} disablePadding sx={{ mb: 1 }}>
-                <ListItemButton
-                  selected={selectedTrip === trip.id}
-                  onClick={() => handleTripClick(trip.id)}
-                  sx={{ 
-                    borderRadius: 2,
-                    transition: 'all 0.2s',
-                    '&.Mui-selected': {
-                      bgcolor: alpha(theme.palette.primary.main, 0.15),
-                      '&:hover': {
-                        bgcolor: alpha(theme.palette.primary.main, 0.2),
-                      },
-                    },
-                  }}
-                >
-                  <MusicNoteIcon 
-                    sx={{ 
-                      mr: 2, 
-                      color: selectedTrip === trip.id ? 'primary.main' : 'text.secondary',
-                      transition: 'color 0.2s',
-                    }} 
-                  />
-                  <ListItemText 
-                    primary={
-                      <Typography 
-                        variant="body1" 
-                        fontWeight={selectedTrip === trip.id ? 600 : 400}
-                        color={selectedTrip === trip.id ? 'primary.main' : 'text.primary'}
-                      >
-                        {trip.name}
-                      </Typography>
-                    }
-                    secondary={
-                      <Box 
-                        component="span" 
-                        sx={{ 
-                          whiteSpace: 'nowrap', 
-                          overflow: 'hidden', 
-                          textOverflow: 'ellipsis',
-                          maxWidth: '180px',
-                          color: 'text.secondary',
-                          fontSize: 'body2.fontSize'
-                        }}
-                      >
-                        {trip.description || 'No description'}
-                      </Box>
-                    }
-                  />
-                  <Badge 
-                    badgeContent={trip.songs?.length || 0} 
-                    color="primary"
-                    sx={{ 
-                      '& .MuiBadge-badge': {
-                        bgcolor: alpha(theme.palette.primary.main, 0.2),
-                        color: 'primary.main',
-                        fontWeight: 'bold',
-                      }
-                    }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        )}
-
-        {/* Shared Projects Section */}
-        {sharedTrips.length > 0 && (
-          <>
-            <Typography 
-              variant="subtitle2" 
-              color="text.secondary" 
-              sx={{ 
-                px: 2, 
-                py: 1,
-                mt: 2,
-                fontWeight: 500,
-                letterSpacing: 0.5,
-              }}
-            >
-              SHARED WITH YOU
-            </Typography>
-            <List sx={{ px: 1 }}>
-              {sharedTrips.map((trip) => (
-                <ListItem
-                  key={trip.id}
-                  button
-                  selected={selectedTrip === trip.id}
-                  onClick={() => handleTripClick(trip.id)}
-                  sx={{
-                    borderRadius: 2,
-                    mb: 0.5,
-                    '&:hover': {
-                      bgcolor: 'action.hover',
-                    },
-                  }}
-                >
-                  <ListItemIcon>
-                    <FolderIcon color={selectedTrip === trip.id ? 'primary' : 'inherit'} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={trip.name}
-                    secondary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Chip
-                          size="small"
-                          label="Shared"
-                          color="info"
-                          sx={{ height: 20 }}
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {new Date(trip.updatedAt).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </>
-        )}
-      </Box>
-
-      {/* Settings Section */}
-      <Divider />
-      <Box sx={{ p: 2 }}>
-        <Button
-          variant="text"
-          color="inherit"
-          startIcon={<SettingsIcon />}
-          fullWidth
-          onClick={() => setOpenSettings(true)}
-          sx={{ 
-            justifyContent: 'flex-start',
-            py: 1.5,
-            borderRadius: 2,
-            '&:hover': {
-              bgcolor: alpha(theme.palette.common.white, 0.05),
-            }
-          }}
-        >
-          Settings
-        </Button>
-      </Box>
-
-      {/* Create Project Dialog */}
-      {openDialog && (
-        <EmptyProjectPanel
-          tripId="new"
-          onClose={() => setOpenDialog(false)}
-          onProjectCreated={handleCreateTrip}
-          isDialog={true}
-          mode="project"
-        />
-      )}
-
-      {/* Settings Dialog */}
-      {openSettings && (
-        <Dialog
-          open={openSettings}
-          onClose={() => setOpenSettings(false)}
-          maxWidth="md"
-          fullWidth
-        >
+        <DialogTitle>Settings</DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
           <SettingsPanel onClose={() => setOpenSettings(false)} />
-        </Dialog>
-      )}
-    </Box>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

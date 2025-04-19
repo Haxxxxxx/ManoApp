@@ -25,6 +25,13 @@ service cloud.firestore {
       allow write: if isOwner(userId);
     }
 
+    // Albums collection
+    match /albums/{albumId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
     // Trips collection
     match /trips/{tripId} {
       allow read: if isAuthenticated() && (
@@ -61,14 +68,18 @@ service cloud.firestore {
           request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.tripId)).data.collaborators
         )
       );
-      allow create: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid &&
-        exists(/databases/$(database)/documents/trips/$(request.resource.data.tripId)) &&
+      // Allow users to list their own songs
+      allow list: if isAuthenticated() && request.query.limit <= 1000 && (
+        request.query.filters.userId == request.auth.uid ||
         (
-          get(/databases/$(database)/documents/trips/$(request.resource.data.tripId)).data.userId == request.auth.uid ||
-          request.auth.uid in get(/databases/$(database)/documents/trips/$(request.resource.data.tripId)).data.collaborators
+          exists(/databases/$(database)/documents/trips/$(request.query.filters.tripId)) &&
+          (
+            get(/databases/$(database)/documents/trips/$(request.query.filters.tripId)).data.userId == request.auth.uid ||
+            request.auth.uid in get(/databases/$(database)/documents/trips/$(request.query.filters.tripId)).data.collaborators
+          )
         )
       );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         exists(/databases/$(database)/documents/trips/$(resource.data.tripId)) &&
@@ -93,7 +104,8 @@ service cloud.firestore {
 
     // User settings collection
     match /userSettings/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
     }
   }
 }

@@ -72,6 +72,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         const data = artistProfileSnap.data();
         if (data) {
+          // Safely convert Firestore timestamps to Date objects
+          const convertTimestamp = (timestamp: any): Date => {
+            if (timestamp && typeof timestamp.toDate === 'function') {
+              return timestamp.toDate();
+            } else if (timestamp instanceof Date) {
+              return timestamp;
+            } else if (typeof timestamp === 'string') {
+              return new Date(timestamp);
+            } else if (typeof timestamp === 'number') {
+              return new Date(timestamp);
+            }
+            return new Date();
+          };
+
           const profile: ArtistProfile = {
             id: data.id || authUser.uid,
             userId: data.userId || authUser.uid,
@@ -83,16 +97,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             socialLinks: data.socialLinks || {},
             photoURL: data.photoURL,
             coverImage: data.coverImage,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date(),
+            createdAt: convertTimestamp(data.createdAt),
+            updatedAt: convertTimestamp(data.updatedAt),
           };
           setArtistProfile(profile);
         }
       }
       setCurrentUser(authUser);
+      // Redirect to root page if we're on the auth page
+      if (window.location.pathname === '/auth') {
+        navigate('/');
+      }
     } else {
       setCurrentUser(null);
       setArtistProfile(null);
+      // Redirect to auth page if we're not already there
+      if (window.location.pathname !== '/auth') {
+        navigate('/auth');
+      }
     }
     setLoading(false);
   };
@@ -134,21 +156,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateProfile = async (data: Partial<ArtistProfile>) => {
     if (!currentUser) return;
     
+    // Create a clean update object without any Date objects
+    const cleanData: Record<string, any> = {};
+    Object.entries(data).forEach(([key, value]) => {
+      // Skip timestamp fields as we'll handle them separately
+      if (key !== 'createdAt' && key !== 'updatedAt') {
+        cleanData[key] = value;
+      }
+    });
+    
     // Add timestamp to the update data
     const updateData = {
-      ...data,
-      updatedAt: new Date()
+      ...cleanData,
+      updatedAt: Timestamp.fromDate(new Date())
     };
     
     // Update in database
     await updateArtistProfile(currentUser.uid, updateData);
     
-    // Update local state
+    // Update local state with Date objects (not Timestamps)
     setArtistProfile((prev: ArtistProfile | null) => {
       if (!prev) return null;
       return {
         ...prev,
-        ...updateData
+        ...cleanData,
+        updatedAt: new Date()
       };
     });
   };

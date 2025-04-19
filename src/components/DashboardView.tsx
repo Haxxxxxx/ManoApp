@@ -98,6 +98,7 @@ interface FileSystemDirectoryHandle extends FileSystemHandle {
 const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
   const { trips, sharedTrips, loading, error: tripsError, addTrip, removeTrip } = useTrips();
   const [localFiles, setLocalFiles] = useState<Song[]>([]);
+  const [localProjectId, setLocalProjectId] = useState<string>('local-songs-project');
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -389,7 +390,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
   };
 
   const handleLocalFileCardClick = () => {
-    setShowPathDialog(true);
+    // Navigate to the local songs project
+    onSelectTrip(localProjectId);
   };
 
   const handlePathSubmit = async () => {
@@ -451,38 +453,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
   };
 
   const handleLocalSongClick = (song: Song) => {
-    // Create a local trip object that matches the Trip interface
-    const localTrip: Trip = {
-      id: 'local',
-      name: 'Local Files',
-      description: 'Local audio files',
-      userId: 'local',
-      songs: localFiles.map(s => ({
-        ...s,
-        metadata: {
-          ...s.metadata,
-          source: 'local'
-        }
-      })),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      collaborators: [],
-      tags: [],
-      status: 'draft',
-      type: 'project',
-      visibility: 'private',
-      metadata: {
-        genre: [],
-        releaseDate: new Date().toISOString(),
-        language: 'en'
-      }
-    };
-    
-    // Store the current local trip in sessionStorage
-    sessionStorage.setItem('currentLocalTrip', JSON.stringify(localTrip));
-    
-    // Navigate to the song details with local source
-    navigate(`/trip/local/song/${song.id}?source=local`);
+    // Navigate to the song details page
+    navigate(`/song/${song.id}?source=local`);
   };
 
   const handleFolderSelect = async () => {
@@ -575,6 +547,16 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
     const savedLocalFiles = localStorage.getItem('localFiles');
     if (savedLocalFiles) {
       setLocalFiles(JSON.parse(savedLocalFiles));
+    }
+    
+    // Create a local project ID if it doesn't exist
+    const savedLocalProjectId = localStorage.getItem('localProjectId');
+    if (savedLocalProjectId) {
+      setLocalProjectId(savedLocalProjectId);
+    } else {
+      const newLocalProjectId = 'local-songs-project';
+      setLocalProjectId(newLocalProjectId);
+      localStorage.setItem('localProjectId', newLocalProjectId);
     }
   }, []);
 
@@ -768,12 +750,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
           <Grid item>
             <Button
               variant="outlined"
-              fullWidth
               startIcon={<CloudUploadIcon />}
               onClick={handleUploadClick}
               disabled={uploading}
               sx={{ 
-                py: 2, 
+                py: 1.5,
+                px: 3,
                 borderRadius: 2,
                 borderColor: 'secondary.main',
                 color: 'secondary.main',
@@ -789,12 +771,12 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
           <Grid item>
             <Button
               variant="outlined"
-              fullWidth
               startIcon={<PlaylistAddIcon />}
               onClick={handlePlaylistClick}
               disabled={creating}
               sx={{ 
-                py: 2, 
+                py: 1.5,
+                px: 3,
                 borderRadius: 2,
                 borderColor: 'success.main',
                 color: 'success.main',
@@ -810,11 +792,31 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
           <Grid item>
             <Button
               variant="outlined"
-              fullWidth
+              startIcon={<AlbumIcon />}
+              onClick={() => navigate('/albums/create')}
+              sx={{ 
+                py: 1.5,
+                px: 3,
+                borderRadius: 2,
+                borderColor: 'warning.main',
+                color: 'warning.main',
+                '&:hover': {
+                  borderColor: 'warning.dark',
+                  bgcolor: 'rgba(255, 167, 38, 0.05)',
+                }
+              }}
+            >
+              Customize Album
+            </Button>
+          </Grid>
+          <Grid item>
+            <Button
+              variant="outlined"
               startIcon={<BarChartIcon />}
               onClick={handleAnalyticsClick}
               sx={{ 
-                py: 2, 
+                py: 1.5,
+                px: 3,
                 borderRadius: 2,
                 borderColor: 'info.main',
                 color: 'info.main',
@@ -994,77 +996,108 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
                 boxShadow: theme.shadows[8],
               }
             }}
+            onClick={handleLocalFileCardClick}
           >
             <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
               <FolderIcon sx={{ fontSize: 40, color: 'primary.main' }} />
               <Box sx={{ flex: 1 }}>
                 <Typography variant="h6" gutterBottom>
-                  Local Audio Files
+                  Local Songs
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {localFiles.length} songs
                 </Typography>
               </Box>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleFolderSelect();
+                }}
+              >
+                Add Local Files
+              </Button>
             </Box>
 
             <Divider />
 
-            <List sx={{ flex: 1, overflow: 'auto', maxHeight: 300 }}>
-              {localFiles.map((song) => (
-                <ListItem
-                  key={song.id}
-                  onClick={() => handleLocalSongClick(song)}
-                  sx={{
-                    '&:hover': {
-                      bgcolor: alpha(theme.palette.primary.main, 0.08),
-                    },
-                    cursor: 'pointer'
-                  }}
-                >
-                  <ListItemIcon>
-                    <MusicNoteIcon color="primary" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={song.title}
-                    secondary={
-                      <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography component="span" variant="body2" color="text.secondary">
-                          {song.artist}
+            <Box sx={{ p: 2 }}>
+              {localFiles.length > 0 ? (
+                <Grid container spacing={2}>
+                  {localFiles.slice(0, 4).map((song) => (
+                    <Grid item xs={12} sm={6} md={3} key={song.id}>
+                      <Card
+                        sx={{
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          transition: 'transform 0.2s, box-shadow 0.2s',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: theme.shadows[4],
+                          }
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleLocalSongClick(song);
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            height: 140,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            bgcolor: alpha(theme.palette.primary.main, 0.1),
+                          }}
+                        >
+                          <MusicNoteIcon sx={{ fontSize: 60, color: 'primary.main' }} />
+                        </Box>
+                        <CardContent sx={{ flexGrow: 1 }}>
+                          <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                            {song.title}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" noWrap>
+                            {song.artist}
+                          </Typography>
+                          {song.metadata?.tags && song.metadata.tags.length > 0 && (
+                            <Box sx={{ mt: 1 }}>
+                              <Chip
+                                label={song.metadata.tags[0]}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            </Box>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                  {localFiles.length > 4 && (
+                    <Grid item xs={12}>
+                      <Box sx={{ textAlign: 'center', mt: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          + {localFiles.length - 4} more songs
                         </Typography>
-                        {song.metadata?.tags && song.metadata.tags.length > 0 && (
-                          <Chip
-                            label={song.metadata.tags[0]}
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                          />
-                        )}
                       </Box>
-                    }
-                  />
-                  <IconButton
-                    edge="end"
-                    aria-label="delete"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteLocalFile(song.id);
-                    }}
-                    sx={{ color: 'error.main' }}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItem>
-              ))}
-              {localFiles.length === 0 && (
-                <ListItem>
-                  <ListItemText
-                    primary="No local files"
-                    secondary="Click 'Add Local Files' to import songs from your computer"
-                    sx={{ textAlign: 'center' }}
-                  />
-                </ListItem>
+                    </Grid>
+                  )}
+                </Grid>
+              ) : (
+                <Box sx={{ p: 4, textAlign: 'center' }}>
+                  <Typography variant="body1" color="text.secondary">
+                    No local files
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Click 'Add Local Files' to import songs from your computer
+                  </Typography>
+                </Box>
               )}
-            </List>
+            </Box>
           </Card>
         </Grid>
       </Grid>
