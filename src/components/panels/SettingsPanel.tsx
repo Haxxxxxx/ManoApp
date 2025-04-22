@@ -58,7 +58,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { updateUserProfile, deleteAccount } from '../../services/firebaseService';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { useThemeSettings, ThemeSettings } from '../../contexts/ThemeContext';
+import { useThemeSettings, ThemeSettings, defaultSettings } from '../../contexts/ThemeContext';
 import { ChromePicker, ColorResult } from 'react-color';
 
 interface TabPanelProps {
@@ -179,7 +179,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
   };
 
   const handleCancel = () => {
-    setLocalSettings(settings);
+    setLocalSettings(defaultSettings);
   };
 
   const fontFamilies = [

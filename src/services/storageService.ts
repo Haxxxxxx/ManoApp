@@ -1,4 +1,4 @@
-import { ref, listAll, getDownloadURL, uploadBytes, deleteObject, FirebaseStorage } from 'firebase/storage';
+import { ref, listAll, getDownloadURL, uploadBytes, deleteObject, FirebaseStorage, UploadTask, uploadBytesResumable } from 'firebase/storage';
 import { storage } from '../firebase/config';
 import { adminUploadFile, adminDeleteFile } from './adminService';
 import { getStorage } from 'firebase/storage';
@@ -30,11 +30,11 @@ const ALLOWED_IMAGE_TYPES = [
 ];
 
 // Helper function to check if storage is available
-const checkStorage = () => {
+const checkStorage = (): FirebaseStorage => {
   if (!storage) {
-    throw new Error('Storage service is not available. Please check your Firebase configuration and ensure Storage is enabled in your project.');
+    throw new Error('Storage service is not available');
   }
-  return storage as FirebaseStorage;
+  return storage;
 };
 
 export const getSharedDriveFiles = async () => {
@@ -77,10 +77,10 @@ export const getNotionTemplate = async (templateName: string) => {
 
 export const storageService = {
   async uploadFile(file: File, path: string, onProgress?: (progress: number) => void): Promise<string> {
-    checkStorageAvailability();
+    const storageInstance = checkStorage();
 
     try {
-      const storageRef = ref(storage as FirebaseStorage, path);
+      const storageRef = ref(storageInstance, path);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
       return new Promise((resolve, reject) => {
@@ -114,11 +114,11 @@ export const storageService = {
   },
 
   async uploadFileInChunks(file: File, path: string, chunkSize = 5 * 1024 * 1024, onProgress?: (progress: number) => void): Promise<string> {
-    checkStorageAvailability();
+    const storageInstance = checkStorage();
 
     try {
       const totalChunks = Math.ceil(file.size / chunkSize);
-      const storageRef = ref(storage as FirebaseStorage, path);
+      const storageRef = ref(storageInstance, path);
       let uploadedBytes = 0;
 
       for (let i = 0; i < totalChunks; i++) {
@@ -126,7 +126,7 @@ export const storageService = {
         const end = Math.min(start + chunkSize, file.size);
         const chunk = file.slice(start, end);
         
-        const chunkRef = ref(storage as FirebaseStorage, `${path}_chunk_${i}`);
+        const chunkRef = ref(storageInstance, `${path}_chunk_${i}`);
         await uploadBytesResumable(chunkRef, chunk);
         
         uploadedBytes += chunk.size;
@@ -169,33 +169,54 @@ export const storageService = {
  * @param songId The ID of the song this file belongs to (optional)
  * @returns The download URL of the uploaded file
  */
-export const uploadMusicFile = async (file: File, tripId: string, songId?: string): Promise<string> => {
-  const storageInstance = checkStorage();
-
-  // Validate file size
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File size exceeds maximum limit of ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
-  }
-
-  // Validate file type
-  if (!ALLOWED_MUSIC_TYPES.includes(file.type)) {
-    throw new Error(`Invalid file type. Allowed types: ${ALLOWED_MUSIC_TYPES.join(', ')}`);
-  }
-
+export const uploadMusicFile = async (
+  file: File,
+  tripId: string,
+  songId?: string
+): Promise<string> => {
   try {
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = songId 
-      ? `${MUSIC_FILES_FOLDER}/${tripId}/${songId}/${fileName}`
-      : `${MUSIC_FILES_FOLDER}/${tripId}/${fileName}`;
-    
-    const storageRef = ref(storageInstance, filePath);
-    await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(storageRef);
-    
-    console.log('Music file uploaded successfully:', downloadURL);
-    return downloadURL;
+    // Validate file size (max 100MB)
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error('File size exceeds 100MB limit');
+    }
+
+    // Validate file type
+    const ALLOWED_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave'];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      throw new Error('Invalid file type. Only MP3 and WAV files are allowed.');
+    }
+
+    // Create file path
+    const timestamp = Date.now();
+    const filePath = songId
+      ? `music/${tripId}/${songId}_${timestamp}.${file.name.split('.').pop()}`
+      : `music/${tripId}/${timestamp}.${file.name.split('.').pop()}`;
+
+    // Get storage reference
+    const storageRef = ref(checkStorage(), filePath);
+
+    // Upload file with metadata
+    const metadata = {
+      contentType: file.type,
+      customMetadata: {
+        tripId,
+        songId: songId || 'new',
+        uploadedAt: timestamp.toString(),
+      },
+    };
+
+    try {
+      // First attempt: Use uploadBytes directly
+      const snapshot = await uploadBytes(storageRef, file, metadata);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      throw error;
+    }
   } catch (error) {
-    console.error('Error uploading music file:', error);
+    console.error('Error in uploadMusicFile:', error);
     throw error;
   }
 };

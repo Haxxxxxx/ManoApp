@@ -3,6 +3,7 @@ import { getAuth, connectAuthEmulator, Auth } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator, Firestore } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator, FirebaseStorage } from 'firebase/storage';
 import { getFunctions, connectFunctionsEmulator, Functions } from 'firebase/functions';
+import { ref } from 'firebase/storage';
 
 // Load environment variables
 const env = import.meta.env;
@@ -45,8 +46,20 @@ for (const envVar of requiredEnvVars) {
 }
 
 // Initialize Firebase only if no apps exist
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-console.log('Firebase app initialized successfully');
+let app;
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  console.log('Firebase app initialized successfully');
+  console.log('Firebase config:', {
+    projectId: app.options.projectId,
+    storageBucket: app.options.storageBucket,
+    apiKey: app.options.apiKey ? '***' : 'missing',
+    authDomain: app.options.authDomain ? '***' : 'missing'
+  });
+} catch (error) {
+  console.error('Error initializing Firebase app:', error);
+  throw error;
+}
 
 // Initialize services with error handling
 let auth: Auth;
@@ -70,20 +83,27 @@ try {
   throw error;
 }
 
-
 try {
-  // Initialize storage without explicit bucket
+  // Initialize storage with environment variable bucket
+  console.log('Attempting to initialize Firebase Storage...');
+  console.log('Storage bucket from env:', import.meta.env.VITE_FIREBASE_STORAGE_BUCKET);
+  console.log('App options:', {
+    projectId: app.options.projectId,
+    storageBucket: app.options.storageBucket
+  });
+  
   storage = getStorage(app);
+  
   if (!storage) {
+    console.error('Storage initialization returned null or undefined');
     throw new Error('Storage service is not available');
   }
-  console.log('Firebase Storage initialized successfully');
+  console.log('Firebase Storage initialized successfully with bucket:', storage.app.options.storageBucket);
 } catch (error) {
   console.error('Error initializing Firebase Storage:', error);
   if (import.meta.env.PROD) {
-    throw error; // Throw error in production
+    throw error;
   }
-  // In development, we'll allow the app to continue without storage
   console.warn('Continuing without Firebase Storage in development mode');
 }
 
@@ -162,4 +182,4 @@ if (import.meta.env.DEV) {
   }
 }
 
-export { app, auth, db, storage, functions }; 
+export { app, auth, db, storage, functions };

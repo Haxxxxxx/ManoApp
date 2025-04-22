@@ -21,7 +21,7 @@ interface ThemeContextType {
   updateSettings: (newSettings: Partial<ThemeSettings>) => Promise<void>;
 }
 
-const defaultSettings: ThemeSettings = {
+export const defaultSettings: ThemeSettings = {
   primaryColor: '#4CAF50', // Default green
   secondaryColor: '#2196F3', // Default blue
   darkMode: false,

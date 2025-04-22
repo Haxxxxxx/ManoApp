@@ -3,7 +3,7 @@ import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, 
 import { Trip } from '../types/trip';
 import { Song } from '../types/song';
 import { auth } from '../firebase/config';
-import { ref, deleteObject, uploadString } from 'firebase/storage';
+import { ref, deleteObject, uploadString, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase/config';
 import { FirebaseStorage } from 'firebase/storage';
 import { UserProfile } from '../types/user';
@@ -521,11 +521,11 @@ export const getAnalytics = async (userId: string): Promise<any> => {
 };
 
 // Helper function to check if storage is available
-const checkStorage = () => {
+const checkStorage = (): FirebaseStorage => {
   if (!storage) {
-    throw new Error('Storage service is not available. Please check your Firebase configuration and ensure Storage is enabled in your project.');
+    throw new Error('Storage service is not available');
   }
-  return storage as FirebaseStorage;
+  return storage;
 };
 
 export const deleteFile = async (filePath: string): Promise<void> => {
@@ -971,6 +971,39 @@ export const deleteAlbum = async (albumId: string) => {
     await deleteDoc(albumRef);
   } catch (error) {
     console.error('Error deleting album:', error);
+    throw error;
+  }
+};
+
+export const uploadFile = async (
+  file: File,
+  path: string,
+  metadata?: { [key: string]: string }
+): Promise<string> => {
+  try {
+    // Validate file size (max 10MB)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error('File size exceeds 10MB limit');
+    }
+
+    // Get storage reference
+    const storageRef = ref(checkStorage(), path);
+
+    // Upload file with metadata
+    const fileMetadata = {
+      contentType: file.type,
+      customMetadata: {
+        ...metadata,
+        uploadedAt: Date.now().toString(),
+      },
+    };
+
+    const snapshot = await uploadBytes(storageRef, file, fileMetadata);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
+  } catch (error) {
+    console.error('Error in uploadFile:', error);
     throw error;
   }
 }; 

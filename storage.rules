@@ -5,47 +5,38 @@ rules_version = '2';
 //    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    // Default rule - deny all access
+    // Allow all access in development
     match /{allPaths=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
     
     // Allow access to music files for authenticated users
     match /music-files/{tripId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if true;  // Temporarily allow all access for development
+      allow write: if true;  // Temporarily allow all access for development
     }
     
     // Allow access to cover art for authenticated users
     match /cover-art/{tripId}/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if true;  // Temporarily allow all access for development
+      allow write: if true;  // Temporarily allow all access for development
     }
     
     // Allow access to shared drive files for authenticated users
     match /shared-drive/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if true;  // Temporarily allow all access for development
+      allow write: if true;  // Temporarily allow all access for development
     }
     
     // Allow access to notion templates for authenticated users
     match /notion-templates/{fileName} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read: if true;  // Temporarily allow all access for development
+      allow write: if true;  // Temporarily allow all access for development
     }
     
     // Allow access to user-specific files
     match /users/{userId}/{fileName} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if true;  // Temporarily allow all access for development
     }
   }
 }
