@@ -35,12 +35,15 @@ import {
   SkipPrevious as SkipPreviousIcon,
   VolumeUp as VolumeUpIcon,
   Share as ShareIcon,
-  Download as DownloadIcon
+  Download as DownloadIcon,
+  PhotoCamera as PhotoCameraIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getAlbum, deleteAlbum } from '../../services/firebaseService';
+import { getAlbum, deleteAlbum, updateAlbum } from '../../services/firebaseService';
+import { uploadCoverArt } from '../../services/storageService';
 import { Album } from '../../types/album';
+import { exportAlbum } from '../../services/exportService';
 
 const AlbumDetailPage = () => {
   const theme = useTheme();
@@ -54,6 +57,8 @@ const AlbumDetailPage = () => {
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const fetchAlbum = async () => {
@@ -89,7 +94,9 @@ const AlbumDetailPage = () => {
     if (!album) return;
 
     const currentSong = album.songs[currentSongIndex];
-    const filePath = currentSong?.metadata?.filePath;
+    // Check both possible locations of the file path
+    const filePath = currentSong?.metadata?.filePath || currentSong?.filePath;
+    
     if (!filePath) {
       console.warn('No file path found for song:', currentSong);
       return;
@@ -169,7 +176,9 @@ const AlbumDetailPage = () => {
 
   const handlePlayPause = () => {
     const currentSong = album?.songs[currentSongIndex];
-    if (!currentSong?.metadata?.filePath) {
+    const filePath = currentSong?.metadata?.filePath || currentSong?.filePath;
+    
+    if (!filePath) {
       setError('No audio file found for this song.');
       return;
     }
@@ -192,10 +201,20 @@ const AlbumDetailPage = () => {
 
   const handleSongClick = (index: number) => {
     const song = album?.songs[index];
-    if (!song?.metadata?.filePath) {
+    const filePath = song?.metadata?.filePath || song?.filePath;
+    
+    if (!filePath) {
       setError('No audio file found for this song.');
       return;
     }
+
+    // If clicking the currently playing song, toggle play/pause
+    if (index === currentSongIndex) {
+      setIsPlaying(!isPlaying);
+      return;
+    }
+
+    // Otherwise, start playing the new song
     setCurrentSongIndex(index);
     setIsPlaying(true);
   };
@@ -214,6 +233,48 @@ const AlbumDetailPage = () => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleCoverUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !albumId) return;
+
+    try {
+      setUploadingCover(true);
+      setError(null);
+
+      // Upload the cover image
+      const coverImageUrl = await uploadCoverArt(file, albumId);
+
+      // Update the album with the new cover image
+      const updatedAlbum = await updateAlbum(albumId, {
+        ...album!,
+        coverImage: coverImageUrl
+      });
+
+      // Update local state
+      setAlbum(updatedAlbum);
+    } catch (err) {
+      console.error('Error uploading cover:', err);
+      setError('Failed to upload cover image. Please try again.');
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!album) return;
+    
+    try {
+      setIsExporting(true);
+      setError(null);
+      await exportAlbum(album);
+    } catch (err) {
+      console.error('Error exporting album:', err);
+      setError('Failed to export album. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   if (loading) {
@@ -275,7 +336,11 @@ const AlbumDetailPage = () => {
                 aspectRatio: '1', 
                 borderRadius: 2, 
                 overflow: 'hidden',
-                mb: 2
+                mb: 2,
+                position: 'relative',
+                '&:hover .cover-overlay': {
+                  opacity: 1
+                }
               }}
             >
               <Box
@@ -284,6 +349,44 @@ const AlbumDetailPage = () => {
                 alt={album.title}
                 sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
+              <Box
+                className="cover-overlay"
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  bgcolor: 'rgba(0,0,0,0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: 0,
+                  transition: 'opacity 0.2s',
+                  cursor: 'pointer'
+                }}
+              >
+                <input
+                  accept="image/*"
+                  type="file"
+                  id="cover-upload"
+                  onChange={handleCoverUpload}
+                  style={{ display: 'none' }}
+                />
+                <label htmlFor="cover-upload">
+                  <IconButton
+                    component="span"
+                    disabled={uploadingCover}
+                    sx={{ color: 'white' }}
+                  >
+                    {uploadingCover ? (
+                      <CircularProgress size={24} color="inherit" />
+                    ) : (
+                      <PhotoCameraIcon />
+                    )}
+                  </IconButton>
+                </label>
+              </Box>
             </Box>
             
             <Typography variant="h6" gutterBottom>
@@ -331,9 +434,18 @@ const AlbumDetailPage = () => {
                 variant="contained" 
                 startIcon={<EditIcon />}
                 onClick={handleEditAlbum}
-                fullWidth
+                sx={{ flex: 1 }}
               >
                 Edit Album
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={isExporting ? <CircularProgress size={20} /> : <DownloadIcon />}
+                onClick={handleExport}
+                disabled={isExporting || album.selectedPlatforms.length === 0}
+                sx={{ flex: 1 }}
+              >
+                {isExporting ? 'Exporting...' : 'Export Album'}
               </Button>
               <IconButton 
                 color="error"
@@ -362,13 +474,17 @@ const AlbumDetailPage = () => {
                     mb: 1,
                     '&:hover': {
                       bgcolor: alpha(theme.palette.primary.main, 0.05),
-                    }
+                    },
+                    cursor: 'pointer'
                   }}
-                  button
                   onClick={() => handleSongClick(index)}
                 >
                   <ListItemIcon>
-                    <MusicNoteIcon color={index === currentSongIndex ? 'primary' : 'inherit'} />
+                    {index === currentSongIndex && isPlaying ? (
+                      <PauseIcon color="primary" />
+                    ) : (
+                      <PlayIcon color={index === currentSongIndex ? 'primary' : 'inherit'} />
+                    )}
                   </ListItemIcon>
                   <ListItemText
                     primary={song.title}
@@ -385,7 +501,7 @@ const AlbumDetailPage = () => {
                             variant="outlined"
                           />
                         )}
-                        {!song.metadata?.filePath && (
+                        {!song.metadata?.filePath && !song.filePath && (
                           <Chip
                             label="No audio file"
                             size="small"

@@ -1,6 +1,7 @@
 import { Song } from '../types';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { Album } from '../types/album';
 
 /**
  * Export a song for SoundCloud with all metadata
@@ -313,5 +314,142 @@ Instructions:
       console.error('Error stack:', error.stack);
     }
     throw new Error(`Failed to export mixtape for SoundCloud: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+interface PlatformRequirements {
+  audioFormat: string;
+  bitrateKbps: number;
+  maxFileSize: number;
+  metadataFormat: string;
+}
+
+const platformRequirements: Record<string, PlatformRequirements> = {
+  spotify: {
+    audioFormat: 'WAV',
+    bitrateKbps: 1411,
+    maxFileSize: 200 * 1024 * 1024, // 200MB
+    metadataFormat: 'JSON'
+  },
+  apple: {
+    audioFormat: 'AIFF',
+    bitrateKbps: 1411,
+    maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
+    metadataFormat: 'XML'
+  },
+  amazon: {
+    audioFormat: 'FLAC',
+    bitrateKbps: 1411,
+    maxFileSize: 500 * 1024 * 1024, // 500MB
+    metadataFormat: 'JSON'
+  },
+  youtube: {
+    audioFormat: 'MP3',
+    bitrateKbps: 320,
+    maxFileSize: 1024 * 1024 * 1024, // 1GB
+    metadataFormat: 'JSON'
+  }
+};
+
+export const exportAlbum = async (album: Album): Promise<void> => {
+  try {
+    const zip = new JSZip();
+    
+    // Create a folder for each selected platform
+    for (const platform of album.selectedPlatforms) {
+      const requirements = platformRequirements[platform];
+      const platformFolder = zip.folder(platform);
+      
+      if (!platformFolder) continue;
+      
+      // Add metadata file
+      const metadata = {
+        title: album.title,
+        artist: album.artist,
+        releaseDate: album.releaseDate,
+        genre: album.genre,
+        description: album.description,
+        tracks: album.songs.map((song, index) => ({
+          trackNumber: index + 1,
+          title: song.title,
+          artist: song.artist,
+          duration: song.duration,
+          isrc: song.metadata?.isrc || '',
+          genre: song.metadata?.genre || [],
+          bpm: song.metadata?.bpm || null,
+          key: song.metadata?.key || '',
+          featuring: song.metadata?.featuring || []
+        }))
+      };
+      
+      // Add metadata file in the appropriate format
+      if (requirements.metadataFormat === 'JSON') {
+        platformFolder.file('metadata.json', JSON.stringify(metadata, null, 2));
+      } else if (requirements.metadataFormat === 'XML') {
+        // Convert metadata to XML format
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<album>
+  <title>${metadata.title}</title>
+  <artist>${metadata.artist}</artist>
+  <releaseDate>${metadata.releaseDate}</releaseDate>
+  <genre>${metadata.genre}</genre>
+  <description>${metadata.description}</description>
+  <tracks>
+    ${metadata.tracks.map(track => `
+    <track>
+      <trackNumber>${track.trackNumber}</trackNumber>
+      <title>${track.title}</title>
+      <artist>${track.artist}</artist>
+      <duration>${track.duration}</duration>
+      <isrc>${track.isrc}</isrc>
+      <genre>${track.genre.join(',')}</genre>
+      <bpm>${track.bpm || ''}</bpm>
+      <key>${track.key}</key>
+      <featuring>${track.featuring.join(',')}</featuring>
+    </track>
+    `).join('')}
+  </tracks>
+</album>`;
+        platformFolder.file('metadata.xml', xml);
+      }
+      
+      // Create a folder for audio files
+      const audioFolder = platformFolder.folder('audio');
+      if (!audioFolder) continue;
+      
+      // Add placeholder for audio files (in real implementation, you would convert and add actual audio files)
+      album.songs.forEach((song, index) => {
+        const trackNumber = (index + 1).toString().padStart(2, '0');
+        const fileName = `${trackNumber}_${song.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${requirements.audioFormat.toLowerCase()}`;
+        audioFolder.file(fileName, 'Audio file placeholder');
+      });
+      
+      // Add cover art if available
+      if (album.coverImage) {
+        platformFolder.file('cover.jpg', 'Cover image placeholder');
+      }
+      
+      // Add README with platform-specific instructions
+      platformFolder.file('README.txt', `Export package for ${platform.toUpperCase()}
+Audio Format: ${requirements.audioFormat}
+Bitrate: ${requirements.bitrateKbps}kbps
+Maximum File Size: ${requirements.maxFileSize / (1024 * 1024)}MB
+
+This package contains:
+1. Audio files in the required format
+2. Metadata file in ${requirements.metadataFormat} format
+3. Cover artwork
+4. Platform-specific requirements and guidelines
+
+Please ensure all files meet the platform's requirements before uploading.`);
+    }
+    
+    // Generate and download the zip file
+    const content = await zip.generateAsync({ type: 'blob' });
+    const fileName = `${album.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.zip`;
+    saveAs(content, fileName);
+  } catch (error) {
+    console.error('Error exporting album:', error);
+    throw error;
   }
 }; 

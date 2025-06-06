@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { Trip } from '../types/trip';
-import { getTrips, getCollaborativeTrips } from '../services/firebaseService';
 import { useAuth } from './AuthContext';
+import { useUserTrips, useSharedTrips } from '../hooks/useFirestore';
 
 interface TripContextType {
   trips: Trip[];
   sharedTrips: Trip[];
   loading: boolean;
-  error: string | null;
+  error: Error | null;
   refreshTrips: () => Promise<void>;
   addTrip: (trip: Trip) => void;
   updateTrip: (tripId: string, updatedTrip: Trip) => void;
@@ -29,56 +29,35 @@ interface TripProviderProps {
 }
 
 export const TripProvider: React.FC<TripProviderProps> = ({ children }) => {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [sharedTrips, setSharedTrips] = useState<Trip[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const { currentUser } = useAuth();
+  const { data: userTrips, loading: userTripsLoading, error: userTripsError, refresh: refreshUserTrips } = useUserTrips(currentUser?.uid || '');
+  const { data: sharedTripsData, loading: sharedTripsLoading, error: sharedTripsError, refresh: refreshSharedTrips } = useSharedTrips(currentUser?.uid || '');
 
-  const fetchTrips = async () => {
-    if (!currentUser) return;
-    
-    try {
-      setLoading(true);
-      const [userTrips, collaborativeTrips] = await Promise.all([
-        getTrips(currentUser.uid),
-        getCollaborativeTrips(currentUser.uid)
-      ]);
-      setTrips(userTrips);
-      setSharedTrips(collaborativeTrips);
-      setError(null);
-    } catch (error) {
-      console.error('Error fetching trips:', error);
-      setError('Failed to load projects. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  const refreshTrips = async () => {
+    await Promise.all([refreshUserTrips(), refreshSharedTrips()]);
   };
 
-  useEffect(() => {
-    fetchTrips();
-  }, [currentUser]);
-
   const addTrip = (trip: Trip) => {
-    setTrips(prevTrips => [trip, ...prevTrips]);
+    // The cache will be automatically updated by the useFirestore hook
+    refreshTrips();
   };
 
   const updateTrip = (tripId: string, updatedTrip: Trip) => {
-    setTrips(prevTrips => 
-      prevTrips.map(trip => trip.id === tripId ? updatedTrip : trip)
-    );
+    // The cache will be automatically updated by the useFirestore hook
+    refreshTrips();
   };
 
   const removeTrip = (tripId: string) => {
-    setTrips(prevTrips => prevTrips.filter(trip => trip.id !== tripId));
+    // The cache will be automatically updated by the useFirestore hook
+    refreshTrips();
   };
 
   const value = {
-    trips,
-    sharedTrips,
-    loading,
-    error,
-    refreshTrips: fetchTrips,
+    trips: (userTrips as Trip[]) || [],
+    sharedTrips: (sharedTripsData as Trip[]) || [],
+    loading: userTripsLoading || sharedTripsLoading,
+    error: userTripsError || sharedTripsError,
+    refreshTrips,
     addTrip,
     updateTrip,
     removeTrip

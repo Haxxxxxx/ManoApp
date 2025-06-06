@@ -41,24 +41,25 @@ export const getSharedDriveFiles = async () => {
   const storageInstance = checkStorage();
 
   try {
-    const storageRef = ref(storageInstance, SHARED_DRIVE_FOLDER);
-    const result = await listAll(storageRef);
+    const sharedDriveRef = ref(storageInstance, SHARED_DRIVE_FOLDER);
+    const filesList = await listAll(sharedDriveRef);
     
-    const files = await Promise.all(
-      result.items.map(async (item) => {
+    // Get download URLs for all files
+    const filesWithUrls = await Promise.all(
+      filesList.items.map(async (item) => {
         const url = await getDownloadURL(item);
         return {
           name: item.name,
-          url,
-          path: item.fullPath
+          fullPath: item.fullPath,
+          url: url
         };
       })
     );
     
-    return files;
+    return filesWithUrls;
   } catch (error) {
-    console.error('Error getting shared drive files:', error);
-    throw new Error('Failed to get shared drive files. Please check your Firebase Storage configuration.');
+    console.error('Error accessing shared drive:', error);
+    throw new Error('Failed to access shared drive. Please check your Firebase Storage configuration.');
   }
 };
 

@@ -1,12 +1,18 @@
-import { Box, Typography, Paper, Button, Stepper, Step, StepLabel, TextField, FormControlLabel, Checkbox, CircularProgress, Alert, Divider, Chip, Stack, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Box, Typography, Paper, Button, Stepper, Step, StepLabel, TextField, FormControlLabel, Checkbox, CircularProgress, Alert, Divider, Chip, Stack, Dialog, DialogTitle, DialogContent, DialogActions, RadioGroup, Radio, FormControl, FormLabel } from '@mui/material';
 import { useState } from 'react';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import { Trip } from '../../types/trip';
 import { Song } from '../../types/song';
-import { exportForSoundCloud, exportMixtapeForSoundCloud } from '../../services/exportService';
+import { exportForSoundCloud, exportMixtapeForSoundCloud, exportAlbum } from '../../services/exportService';
+import { publishToSoundCloud } from '../../services/soundcloudService';
+import { publishToSpotify } from '../../services/spotifyService';
 import LocalFileBrowser from '../LocalFileBrowser';
 import { LocalFile, convertLocalFileToSong } from '../../services/localFileService';
+import AlbumIcon from '@mui/icons-material/Album';
+import MusicNoteIcon from '@mui/icons-material/MusicNote';
+import type { AlbumSong } from '../../types/album';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface PublishingPanelProps {
   trip: Trip;
@@ -16,6 +22,7 @@ interface PublishingPanelProps {
 }
 
 const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProps) => {
+  const { currentUser } = useAuth();
   const [activeStep, setActiveStep] = useState(0);
   const [publishing, setPublishing] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -30,6 +37,8 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
     isPrivate: false,
     allowDownloads: true,
     tags: trip.tags?.join(', ') || '',
+    publishType: 'album' as 'album' | 'single' | 'mixtape',
+    selectedPlatforms: [platform],
   });
 
   // Mixtape export fields
@@ -59,14 +68,145 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
     setSuccess(null);
     
     try {
-      // Implement publishing logic here
-      // For now, just simulate a delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setSuccess('Successfully published to ' + platform);
+      const selectedSongs = songs.filter(song => publishingData.selectedSongs.includes(song.id));
+      
+      if (platform === 'soundcloud') {
+        if (publishingData.publishType === 'album') {
+          await publishToSoundCloud({
+            title: publishingData.title,
+            description: publishingData.description,
+            genre: selectedSongs[0]?.metadata?.genre?.[0] || '',
+            tags: publishingData.tags.split(',').map(tag => tag.trim()),
+            fileUrl: selectedSongs[0].filePath || '',
+            isPrivate: publishingData.isPrivate,
+            downloadable: publishingData.allowDownloads
+          });
+        } else {
+          // Handle mixtape publishing
+          await exportMixtapeForSoundCloud(
+            selectedSongs.map(song => ({
+              ...song,
+              duration: typeof song.duration === 'number' ? song.duration.toString() : song.duration
+            })),
+            publishingData.title,
+            publishingData.description,
+            publishingData.tags.split(',').map(tag => tag.trim())
+          );
+        }
+      } else if (platform === 'spotify') {
+        await publishToSpotify({
+          name: publishingData.title,
+          description: publishingData.description,
+          releaseDate: publishingData.releaseDate,
+          isExplicit: publishingData.isExplicit,
+          songs: selectedSongs.map(song => ({
+            title: song.title,
+            artist: song.artist,
+            duration: typeof song.duration === 'number' ? song.duration.toString() : song.duration,
+            fileUrl: song.filePath || ''
+          }))
+        });
+      }
+      
+      setSuccess(`Successfully published to ${platform}`);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to publish');
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const selectedSongs = songs.filter(song => publishingData.selectedSongs.includes(song.id));
+      
+      if (publishingData.publishType === 'album') {
+        const albumSongs: AlbumSong[] = selectedSongs.map(song => {
+          // Convert duration to number
+          let durationInSeconds: number;
+          if (typeof song.duration === 'number') {
+            durationInSeconds = song.duration;
+          } else {
+            // Parse duration string in format "MM:SS" or "HH:MM:SS"
+            const parts = song.duration.split(':').map(Number);
+            if (parts.length === 2) {
+              durationInSeconds = parts[0] * 60 + parts[1];
+            } else if (parts.length === 3) {
+              durationInSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+            } else {
+              durationInSeconds = 0;
+            }
+          }
+
+          return {
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            duration: durationInSeconds,
+            filePath: song.filePath,
+            metadata: {
+              source: song.metadata?.source === 'local' ? 'local' : 
+                     song.metadata?.source === 'remote' ? 'firebase' : 'project',
+              projectName: trip.name,
+              bpm: song.metadata?.bpm,
+              key: song.metadata?.key,
+              genre: song.metadata?.genre,
+              tags: song.metadata?.tags,
+              releaseDate: song.metadata?.releaseDate,
+              featuring: song.metadata?.featuring,
+              lyrics: song.metadata?.lyrics,
+              videoUrl: song.metadata?.videoUrl,
+              filePath: song.filePath
+            }
+          };
+        });
+
+        const now = new Date().toISOString();
+        await exportAlbum({
+          id: `album-${Date.now()}`,
+          userId: currentUser?.uid || 'anonymous',
+          title: publishingData.title,
+          artist: selectedSongs[0]?.artist || '',
+          releaseDate: publishingData.releaseDate,
+          genre: selectedSongs[0]?.metadata?.genre?.[0] || '',
+          description: publishingData.description,
+          songs: albumSongs,
+          selectedPlatforms: publishingData.selectedPlatforms,
+          coverImage: selectedSongs[0]?.imagePath || null,
+          createdAt: now,
+          updatedAt: now
+        });
+      } else if (publishingData.publishType === 'mixtape') {
+        await exportMixtapeForSoundCloud(
+          selectedSongs.map(song => ({
+            ...song,
+            duration: typeof song.duration === 'number' ? song.duration.toString() : song.duration
+          })),
+          publishingData.title,
+          publishingData.description,
+          publishingData.tags.split(',').map(tag => tag.trim())
+        );
+      } else {
+        // Single song export
+        if (selectedSongs.length === 1) {
+          await exportForSoundCloud({
+            ...selectedSongs[0],
+            duration: typeof selectedSongs[0].duration === 'number' ? selectedSongs[0].duration.toString() : selectedSongs[0].duration
+          });
+        } else {
+          throw new Error('Please select exactly one song for single export');
+        }
+      }
+      
+      setSuccess('Export completed successfully');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to export');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -151,7 +291,49 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
       case 0:
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="h6" gutterBottom>Select Songs to Publish</Typography>
+            <Typography variant="h6" gutterBottom>Select Content Type</Typography>
+            <FormControl component="fieldset">
+              <FormLabel component="legend">Publish as</FormLabel>
+              <RadioGroup
+                value={publishingData.publishType}
+                onChange={(e) => setPublishingData({ ...publishingData, publishType: e.target.value as 'album' | 'single' | 'mixtape' })}
+              >
+                <FormControlLabel 
+                  value="album" 
+                  control={<Radio />} 
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <AlbumIcon />
+                      <Typography>Album</Typography>
+                    </Box>
+                  }
+                />
+                <FormControlLabel 
+                  value="single" 
+                  control={<Radio />} 
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <MusicNoteIcon />
+                      <Typography>Single</Typography>
+                    </Box>
+                  }
+                />
+                <FormControlLabel 
+                  value="mixtape" 
+                  control={<Radio />} 
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <MusicNoteIcon />
+                      <Typography>Mixtape</Typography>
+                    </Box>
+                  }
+                />
+              </RadioGroup>
+            </FormControl>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="h6" gutterBottom>Select Songs</Typography>
             {songs.map((song) => (
               <FormControlLabel
                 key={song.id}
@@ -240,82 +422,23 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
                 }
                 label="Allow Downloads"
               />
-              
-              <Divider sx={{ my: 2 }} />
-              
-              <Typography variant="h6" gutterBottom>Export for SoundCloud</Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Click the button below to download your mixtape in the correct format for SoundCloud.
-                This will create a zip file containing all selected songs with proper metadata.
-              </Typography>
-              
-              {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {error}
-                </Alert>
-              )}
-              
-              {success && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  {success}
-                </Alert>
-              )}
-              
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  Configure Export
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={() => {
-                      if (publishingData.selectedSongs.length === 1) {
-                        handleNext();
-                      } else {
-                        setError('Please select exactly one song to export individually');
-                      }
-                    }}
-                    disabled={exporting}
-                  >
-                    Export Single Song
-                  </Button>
-                  <Button
-                    variant="contained"
-                    onClick={() => {
-                      if (publishingData.selectedSongs.length > 0) {
-                        handleNext();
-                      } else {
-                        setError('Please select at least one song to export as a mixtape');
-                      }
-                    }}
-                    disabled={exporting}
-                  >
-                    Export as Mixtape
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setShowLocalFileBrowser(true)}
-                    disabled={exporting}
-                  >
-                    Add Local Files
-                  </Button>
-                </Box>
-              </Box>
-            </Box>
-          );
-        } else {
-          return (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                {platform === 'spotify' ? 'Spotify Settings' : 'Platform Settings'}
-              </Typography>
-              {/* Add platform-specific settings here */}
-              <Typography color="text.secondary">
-                Configure your {platform} specific settings here.
-              </Typography>
             </Box>
           );
         }
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="h6" gutterBottom>Spotify Settings</Typography>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={publishingData.isExplicit}
+                  onChange={(e) => setPublishingData({ ...publishingData, isExplicit: e.target.checked })}
+                />
+              }
+              label="Explicit Content"
+            />
+          </Box>
+        );
 
       case 3:
         return (
@@ -324,6 +447,7 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
             <Typography><strong>Title:</strong> {publishingData.title}</Typography>
             <Typography><strong>Description:</strong> {publishingData.description}</Typography>
             <Typography><strong>Release Date:</strong> {publishingData.releaseDate}</Typography>
+            <Typography><strong>Type:</strong> {publishingData.publishType}</Typography>
             <Typography><strong>Selected Songs:</strong> {publishingData.selectedSongs.length}</Typography>
             <Typography><strong>Platform:</strong> {platform.charAt(0).toUpperCase() + platform.slice(1)}</Typography>
             
@@ -361,6 +485,18 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
           {renderStepContent(activeStep)}
         </Box>
 
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {success && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {success}
+          </Alert>
+        )}
+
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
           <Button
             variant="outlined"
@@ -377,14 +513,24 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
             </Button>
           )}
           {activeStep === steps.length - 1 ? (
-            <Button
-              variant="contained"
-              startIcon={publishing ? <CircularProgress size={20} /> : <CloudUploadIcon />}
-              onClick={handlePublish}
-              disabled={publishing}
-            >
-              {publishing ? 'Publishing...' : 'Publish'}
-            </Button>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={exporting ? <CircularProgress size={20} /> : <CloudDownloadIcon />}
+                onClick={handleExport}
+                disabled={exporting || publishing}
+              >
+                {exporting ? 'Exporting...' : 'Export'}
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={publishing ? <CircularProgress size={20} /> : <CloudUploadIcon />}
+                onClick={handlePublish}
+                disabled={publishing || exporting}
+              >
+                {publishing ? 'Publishing...' : 'Publish'}
+              </Button>
+            </Box>
           ) : (
             <Button
               variant="contained"

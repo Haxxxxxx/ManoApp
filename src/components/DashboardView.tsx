@@ -33,12 +33,13 @@ import {
   LinearProgress,
   ListItemIcon,
   ListItemButton,
-  Tooltip
+  Tooltip,
+  Container
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { createTrip, createPlaylist, getAnalytics, createSong, deleteTrip } from '../services/firebaseService';
-import { Trip } from '../types/trip';
-import { useAuth } from '../contexts/AuthContext';
+import type { Trip, TripStatus } from '../types/trip';
+import { useAuth } from '../hooks';
 import { useTrips } from '../contexts/TripContext';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import AddIcon from '@mui/icons-material/Add';
@@ -52,20 +53,22 @@ import AlbumIcon from '@mui/icons-material/Album';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import { useDropzone } from 'react-dropzone';
 import { uploadMusicFile } from '../services/storageService';
-import { Song } from '../types/song';
+import type { Song } from '../types/song';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import PersonIcon from '@mui/icons-material/Person';
 import EmptyProjectPanel from './panels/EmptyProjectPanel';
-
-interface DashboardViewProps {
-  onSelectTrip: (tripId: string) => void;
-}
+import StatisticsCards from './dashboard/StatisticsCards';
+import QuickActions from './dashboard/QuickActions';
+import ProjectsSection from './dashboard/ProjectsSection';
+import DashboardDialogs from './dashboard/DashboardDialogs';
+import LocalFilesSection from './dashboard/LocalFilesSection';
 
 interface AnalyticsData {
-  totalProjects: number;
   totalSongs: number;
+  totalProjects: number;
+  recentActivity: any[];
   totalPlaylists: number;
   totalCollaborators: number;
   projectsByMonth: { [key: string]: number };
@@ -95,10 +98,42 @@ interface FileSystemDirectoryHandle extends FileSystemHandle {
   values(): AsyncIterableIterator<FileSystemHandle>;
 }
 
-const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
-  const { trips, sharedTrips, loading, error: tripsError, addTrip, removeTrip } = useTrips();
+interface StatisticsCardsProps {
+  totalProjects: number;
+  totalSongs: number;
+  activeProjects: number;
+  totalCollaborators: number;
+}
+
+interface QuickActionsProps {
+  onUploadClick: () => void;
+  onPlaylistClick: () => void;
+  onAnalyticsClick: () => void;
+  uploading: boolean;
+  creating: boolean;
+  onCreateProject: () => void;
+}
+
+interface ProjectCardProps {
+  trip: Trip;
+  onTripClick: (tripId: string) => void;
+  onDeleteTrip: (trip: Trip) => void;
+}
+
+interface ProjectsSectionProps {
+  title: string;
+  trips: Trip[];
+  loading: boolean;
+  onTripClick: (tripId: string) => void;
+  onDeleteTrip: (trip: Trip) => void;
+  onCreateNew: () => void;
+}
+
+const DashboardView: React.FC = () => {
+  const theme = useTheme();
+  const { trips, sharedTrips, loading, error: tripsError, addTrip, removeTrip, refreshTrips } = useTrips();
   const [localFiles, setLocalFiles] = useState<Song[]>([]);
-  const [localProjectId, setLocalProjectId] = useState<string>('local-songs-project');
+  const [localProjectId] = useState<string>('local-songs-project');
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -114,9 +149,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { currentUser, artistProfile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const theme = useTheme();
   const [showFolderDialog, setShowFolderDialog] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string>('');
   const [scanningFiles, setScanningFiles] = useState(false);
@@ -127,38 +161,48 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
   const [showPathDialog, setShowPathDialog] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
 
-  const handleTripClick = (tripId: string) => {
-    setSelectedTripId(tripId);
-    onSelectTrip(tripId);
-    navigate(`/trip/${tripId}`);
+  // Calculate statistics
+  const totalProjects = trips.length + (sharedTrips?.length || 0);
+  const totalSongs = trips.reduce((acc, trip) => acc + (trip.songs?.length || 0), 0) +
+    (sharedTrips?.reduce((acc, trip) => acc + (trip.songs?.length || 0), 0) || 0);
+  const activeProjects = trips.filter(trip => trip.status === 'active' as TripStatus).length +
+    (sharedTrips?.filter(trip => trip.status === 'active' as TripStatus).length || 0);
+  const totalCollaborators = trips.reduce((acc, trip) => acc + (trip.collaborators?.length || 0), 0) +
+    (sharedTrips?.reduce((acc, trip) => acc + (trip.collaborators?.length || 0), 0) || 0);
+
+  const handleTripClick = (trip: Trip) => {
+    setSelectedTripId(trip.id);
+    navigate(`/trip/${trip.id}`);
   };
 
-  const handleCreateProject = async (song: any) => {
-    if (!currentUser) return;
+  const handleCreateProject = async (project: Omit<Trip, 'id'>) => {
+    if (!user) return;
     
     try {
+      setCreating(true);
       const newTrip = await createTrip({
-        name: song.title,
-        description: song.metadata?.lyrics || '',
-        userId: currentUser.uid,
-        songs: [song],
+        name: project.name,
+        description: project.description || '',
+        userId: user.uid,
+        songs: project.songs || [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         collaborators: [],
-        tags: song.metadata?.tags || [],
+        tags: project.tags || [],
         status: 'draft',
-        type: 'project'
+        type: 'project',
+        isPrivate: true
       });
-      
-      // Add the trip to the context
-      addTrip(newTrip);
       
       setOpenDialog(false);
       
       // Navigate to the new project
       navigate(`/trip/${newTrip.id}`);
     } catch (error) {
-      console.error('Error creating trip:', error);
+      console.error('Error handling project creation:', error);
+      setError('Failed to create project. Please try again.');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -173,7 +217,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
   const handleAnalyticsClick = async () => {
     setShowAnalyticsDialog(true);
     try {
-      const data = await getAnalytics(currentUser?.uid || '');
+      const data = await getAnalytics(user?.uid || '');
       setAnalyticsData(data);
     } catch (err) {
       console.error('Error fetching analytics:', err);
@@ -182,7 +226,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
   };
 
   const onDrop = async (acceptedFiles: File[]) => {
-    if (!currentUser) {
+    if (!user) {
       setError('You must be logged in to upload songs');
       return;
     }
@@ -196,7 +240,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
       const newTrip = await createTrip({
         name: 'Uploaded Songs',
         description: 'Songs uploaded from dashboard',
-        userId: currentUser.uid,
+        userId: user.uid,
         songs: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -232,10 +276,10 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
             // Create a new song entry
             const newSong: Omit<Song, 'id'> = {
               title: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
-              artist: currentUser.email?.split('@')[0] || 'Unknown Artist',
+              artist: user.email?.split('@')[0] || 'Unknown Artist',
               duration: '0:00', // Default duration, would need audio processing to get actual duration
               filePath,
-              userId: currentUser.uid,
+              userId: user.uid,
               metadata: {
                 tags: ['uploaded'],
                 genre: [],
@@ -261,7 +305,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
       addTrip(newTrip);
       
       // Select the newly created trip
-      onSelectTrip(newTrip.id);
       navigate(`/trip/${newTrip.id}`);
       
       // Close the dialog
@@ -274,7 +317,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
     }
   };
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     accept: {
       'audio/*': ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'],
       'application/*': ['.flp']
@@ -282,8 +325,14 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
     onDrop
   });
 
+  // Use the dropzone props in the upload dialog
+  const uploadDialogProps = {
+    ...getRootProps(),
+    ...getInputProps()
+  };
+
   const handleCreatePlaylist = async () => {
-    if (!currentUser) {
+    if (!user) {
       setError('You must be logged in to create a playlist');
       return;
     }
@@ -300,11 +349,11 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
       const newPlaylist = await createPlaylist({
         name: playlistName,
         description: playlistDescription,
-        userId: currentUser.uid,
+        userId: user.uid,
         songs: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        visibility: playlistVisibility,
+        isPrivate: playlistVisibility === 'private',
         collaborators: [],
         tags: [],
         status: 'draft',
@@ -315,7 +364,6 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
       addTrip(newPlaylist);
       
       // Select the newly created playlist
-      onSelectTrip(newPlaylist.id);
       navigate(`/trip/${newPlaylist.id}`);
       
       // Reset form and close dialog
@@ -335,43 +383,30 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
     setPlaylistVisibility(event.target.value as 'private' | 'public' | 'unlisted');
   };
 
-  // Calculate statistics
-  const totalProjects = trips.length + (localFiles.length > 0 ? 1 : 0);
-  const totalSongs = trips.reduce((acc, trip) => acc + (trip.songs?.length || 0), 0) + localFiles.length;
-  const recentProjects = [...trips].sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  ).slice(0, 5);
-
-  const handleDeleteTrip = async (trip: Trip) => {
+  const handleDeleteTrip = (trip: Trip) => {
     setTripToDelete(trip);
     setDeleteConfirmOpen(true);
   };
 
   const confirmDeleteTrip = async () => {
-    if (!tripToDelete) return;
+    if (!tripToDelete || !user) return;
     
     setDeletingTripId(tripToDelete.id);
     setError(null);
     
     try {
       // Check if user has permission to delete (owner or collaborator)
-      const isOwner = tripToDelete.userId === currentUser?.uid;
-      const isCollaborator = tripToDelete.collaborators?.includes(currentUser?.uid || '');
+      const isOwner = tripToDelete.userId === user.uid;
+      const isCollaborator = tripToDelete.collaborators?.includes(user.uid);
       
       if (!isOwner && !isCollaborator) {
         throw new Error('You do not have permission to delete this project');
       }
       
       // Delete from Firebase
-      try {
         await deleteTrip(tripToDelete.id);
-      } catch (deleteError) {
-        console.error('Error deleting trip:', deleteError);
-        // Even if there's an error, we'll still update the UI
-        // The error might be due to permissions, but the deletion might have succeeded
-      }
       
-      // Remove from context regardless of whether the Firebase deletion succeeded
+      // Remove from context
       removeTrip(tripToDelete.id);
       
       setDeleteConfirmOpen(false);
@@ -391,7 +426,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
 
   const handleLocalFileCardClick = () => {
     // Navigate to the local songs project
-    onSelectTrip(localProjectId);
+    navigate(`/trip/${localProjectId}`);
   };
 
   const handlePathSubmit = async () => {
@@ -422,17 +457,17 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
           artist: 'Local',
           duration: '0:00',
           filePath: URL.createObjectURL(file),
-          userId: currentUser?.uid || '',
+          userId: user?.uid || '',
           metadata: {
             tags: ['local'],
             genre: [],
             localFile: true,
             originalFileName: file.name,
-            fileSize: file.size,
+            _fileSize: file.size,
             lastModified: file.lastModified
           }
         })),
-        userId: currentUser?.uid || '',
+        userId: user?.uid || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         collaborators: [],
@@ -441,7 +476,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
         type: 'project'
       };
 
-      setLocalFiles(prev => [...prev, ...newTrip.songs]);
+      const songs = newTrip.songs || [];
+      setLocalFiles(prev => [...prev, ...songs]);
       setShowPathDialog(false);
       setFolderPath('');
     } catch (error: any) {
@@ -552,10 +588,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
     // Create a local project ID if it doesn't exist
     const savedLocalProjectId = localStorage.getItem('localProjectId');
     if (savedLocalProjectId) {
-      setLocalProjectId(savedLocalProjectId);
+      localStorage.setItem('localProjectId', savedLocalProjectId);
     } else {
       const newLocalProjectId = 'local-songs-project';
-      setLocalProjectId(newLocalProjectId);
       localStorage.setItem('localProjectId', newLocalProjectId);
     }
   }, []);
@@ -587,965 +622,128 @@ const DashboardView: React.FC<DashboardViewProps> = ({ onSelectTrip }) => {
     localStorage.setItem('localFiles', JSON.stringify(updatedFiles));
   };
 
+  useEffect(() => {
+    // Fetch analytics data
+    const fetchAnalytics = async () => {
+      try {
+        // Implement analytics data fetching
+        setAnalyticsData({
+          totalSongs,
+          totalProjects,
+          recentActivity: [],
+          totalPlaylists: 0,
+          totalCollaborators,
+          projectsByMonth: {},
+          songsByGenre: {},
+          topCollaborators: []
+        });
+      } catch (error) {
+        console.error('Error fetching analytics:', error);
+      }
+    };
+
+    if (showAnalyticsDialog) {
+      fetchAnalytics();
+    }
+  }, [showAnalyticsDialog, totalSongs, totalProjects, totalCollaborators]);
+
   return (
-    <Box sx={{ height: '100%', overflow: 'auto' }}>
-      {/* Add file input for fallback */}
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Dashboard
+        </Typography>
+
+      <StatisticsCards
+        totalProjects={totalProjects}
+        totalSongs={totalSongs}
+        activeProjects={activeProjects}
+        totalCollaborators={totalCollaborators}
+      />
+
+      <QuickActions
+        onUploadClick={handleUploadClick}
+        onPlaylistClick={handlePlaylistClick}
+        onAnalyticsClick={handleAnalyticsClick}
+        uploading={uploading}
+        creating={creating}
+        onCreateProject={() => setOpenDialog(true)}
+      />
+
+      <Box sx={{ mt: 4 }}>
+        <ProjectsSection
+          title="My Projects"
+          trips={trips}
+          loading={loading}
+          onTripClick={(trip: Trip) => handleTripClick(trip)}
+          onDeleteTrip={handleDeleteTrip}
+          onCreateNew={() => setOpenDialog(true)}
+        />
+              </Box>
+
+      {sharedTrips && sharedTrips.length > 0 && (
+        <Box sx={{ mt: 4 }}>
+          <ProjectsSection
+            title="Shared Projects"
+            trips={sharedTrips}
+            loading={loading}
+            onTripClick={(trip: Trip) => handleTripClick(trip)}
+            onDeleteTrip={handleDeleteTrip}
+            onCreateNew={() => setOpenDialog(true)}
+          />
+            </Box>
+          )}
+
+      <LocalFilesSection
+        localFiles={localFiles}
+        loading={loading}
+        onFolderSelect={handleFolderSelect}
+        onSongClick={handleLocalSongClick}
+        onDeleteSong={handleDeleteLocalFile}
+      />
+
       <input
         type="file"
         ref={fileInputRef}
-        onChange={handleFileInputChange}
         style={{ display: 'none' }}
+        onChange={handleFileInputChange}
         multiple
+        accept="audio/*"
       />
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {/* Welcome Section */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" fontWeight="bold" gutterBottom>
-          Welcome back, {artistProfile?.name || currentUser?.email?.split('@')[0] || 'Artist'}!
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Manage your music projects, collaborate with others, and publish your work.
-        </Typography>
-      </Box>
-
-      {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.primary.main, 0.1),
-              border: '1px solid',
-              borderColor: alpha(theme.palette.primary.main, 0.2),
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <FolderIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-            <Typography variant="h4" fontWeight="bold" color="primary.main">
-              {totalProjects}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Projects
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.secondary.main, 0.1),
-              border: '1px solid',
-              borderColor: alpha(theme.palette.secondary.main, 0.2),
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <MusicNoteIcon sx={{ fontSize: 40, color: 'secondary.main', mb: 1 }} />
-            <Typography variant="h4" fontWeight="bold" color="secondary.main">
-              {totalSongs}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Songs
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.success.main, 0.1),
-              border: '1px solid',
-              borderColor: alpha(theme.palette.success.main, 0.2),
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <TrendingUpIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-            <Typography variant="h4" fontWeight="bold" color="success.main">
-              {trips.filter(trip => trip.songs && trip.songs.length > 0).length}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Active Projects
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 3,
-              bgcolor: alpha(theme.palette.info.main, 0.1),
-              border: '1px solid',
-              borderColor: alpha(theme.palette.info.main, 0.2),
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <GroupAddIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
-            <Typography variant="h4" fontWeight="bold" color="info.main">
-              {trips.reduce((acc, trip) => acc + (trip.collaborators?.length || 0), 0)}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Collaborators
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* Quick Actions */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          Quick Actions
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={() => setOpenDialog(true)}
-              sx={{ 
-                py: 1.5,
-                px: 3,
-                borderRadius: 2,
-                boxShadow: '0px 4px 12px rgba(29, 185, 84, 0.2)',
-                '&:hover': {
-                  boxShadow: '0px 6px 16px rgba(29, 185, 84, 0.3)',
-                }
-              }}
-            >
-              Create Project
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button
-              variant="outlined"
-              startIcon={<CloudUploadIcon />}
-              onClick={handleUploadClick}
-              disabled={uploading}
-              sx={{ 
-                py: 1.5,
-                px: 3,
-                borderRadius: 2,
-                borderColor: 'secondary.main',
-                color: 'secondary.main',
-                '&:hover': {
-                  borderColor: 'secondary.dark',
-                  bgcolor: 'rgba(124, 77, 255, 0.05)',
-                }
-              }}
-            >
-              {uploading ? 'Uploading...' : 'Upload Song'}
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button
-              variant="outlined"
-              startIcon={<PlaylistAddIcon />}
-              onClick={handlePlaylistClick}
-              disabled={creating}
-              sx={{ 
-                py: 1.5,
-                px: 3,
-                borderRadius: 2,
-                borderColor: 'success.main',
-                color: 'success.main',
-                '&:hover': {
-                  borderColor: 'success.dark',
-                  bgcolor: 'rgba(102, 187, 106, 0.05)',
-                }
-              }}
-            >
-              {creating ? 'Creating...' : 'Create Playlist'}
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button
-              variant="outlined"
-              startIcon={<AlbumIcon />}
-              onClick={() => navigate('/albums/create')}
-              sx={{ 
-                py: 1.5,
-                px: 3,
-                borderRadius: 2,
-                borderColor: 'warning.main',
-                color: 'warning.main',
-                '&:hover': {
-                  borderColor: 'warning.dark',
-                  bgcolor: 'rgba(255, 167, 38, 0.05)',
-                }
-              }}
-            >
-              Customize Album
-            </Button>
-          </Grid>
-          <Grid item>
-            <Button
-              variant="outlined"
-              startIcon={<BarChartIcon />}
-              onClick={handleAnalyticsClick}
-              sx={{ 
-                py: 1.5,
-                px: 3,
-                borderRadius: 2,
-                borderColor: 'info.main',
-                color: 'info.main',
-                '&:hover': {
-                  borderColor: 'info.dark',
-                  bgcolor: 'rgba(41, 182, 246, 0.05)',
-                }
-              }}
-            >
-              View Analytics
-            </Button>
-          </Grid>
-        </Grid>
-      </Box>
-
-      {/* Recent Projects */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" fontWeight="bold">
-          Your Projects
-        </Typography>
-        <Button
-          variant="text"
-          color="primary"
-          endIcon={<AddIcon />}
-          onClick={() => setOpenDialog(true)}
-          disabled={creating}
-        >
-          {creating ? 'Creating...' : 'Create New'}
-        </Button>
-      </Box>
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : trips.length === 0 ? (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 4,
-            borderRadius: 3,
-            bgcolor: 'background.paper',
-            border: '1px dashed',
-            borderColor: 'divider',
-            textAlign: 'center',
-            mb: 4
-          }}
-        >
-          <FolderIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5, mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
-            No projects yet
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Create your first project to get started with music management.
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenDialog(true)}
-            disabled={creating}
-            sx={{ 
-              borderRadius: 2,
-              boxShadow: '0px 4px 12px rgba(29, 185, 84, 0.2)',
-              '&:hover': {
-                boxShadow: '0px 6px 16px rgba(29, 185, 84, 0.3)',
-              }
-            }}
-          >
-            {creating ? 'Creating...' : 'Create Project'}
-          </Button>
-        </Paper>
-      ) : (
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          {trips.map((trip) => (
-            <Grid item xs={12} sm={6} md={4} key={trip.id}>
-              <Card
-                elevation={0}
-                sx={{
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.15)',
-                    borderColor: 'primary.main',
-                  },
-                  cursor: 'pointer',
-                  position: 'relative',
-                }}
-              >
-                <Box 
-                  onClick={() => handleTripClick(trip.id)}
-                  sx={{ height: '100%' }}
-                >
-                  <CardMedia
-                    component="div"
-                    sx={{
-                      height: 140,
-                      bgcolor: 'background.default',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <AlbumIcon sx={{ fontSize: 60, color: 'text.secondary', opacity: 0.5 }} />
-                  </CardMedia>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom noWrap>
-                      {trip.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }} noWrap>
-                      {trip.description || 'No description'}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <MusicNoteIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {trip.songs?.length || 0} songs
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                </Box>
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteTrip(trip);
-                  }}
-                  sx={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    bgcolor: 'background.paper',
-                    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-                    '&:hover': {
-                      bgcolor: 'error.light',
-                      color: 'white',
-                    },
-                    zIndex: 1,
-                  }}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
-
-      {/* Local Files Section */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" fontWeight="bold">
-          Local Files
-        </Typography>
-        <Button
-          variant="text"
-          color="primary"
-          endIcon={<AddIcon />}
-          onClick={handleFolderSelect}
-        >
-          Add Local Files
-        </Button>
-      </Box>
-
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Card 
-            sx={{ 
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              position: 'relative',
-              overflow: 'visible',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: theme.shadows[8],
-              }
-            }}
-            onClick={handleLocalFileCardClick}
-          >
-            <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <FolderIcon sx={{ fontSize: 40, color: 'primary.main' }} />
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="h6" gutterBottom>
-                  Local Songs
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {localFiles.length} songs
-                </Typography>
-              </Box>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleFolderSelect();
-                }}
-              >
-                Add Local Files
-              </Button>
-            </Box>
-
-            <Divider />
-
-            <Box sx={{ p: 2 }}>
-              {localFiles.length > 0 ? (
-                <Grid container spacing={2}>
-                  {localFiles.slice(0, 4).map((song) => (
-                    <Grid item xs={12} sm={6} md={3} key={song.id}>
-                      <Card
-                        sx={{
-                          height: '100%',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          transition: 'transform 0.2s, box-shadow 0.2s',
-                          '&:hover': {
-                            transform: 'translateY(-4px)',
-                            boxShadow: theme.shadows[4],
-                          }
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleLocalSongClick(song);
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            height: 140,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            bgcolor: alpha(theme.palette.primary.main, 0.1),
-                          }}
-                        >
-                          <MusicNoteIcon sx={{ fontSize: 60, color: 'primary.main' }} />
-                        </Box>
-                        <CardContent sx={{ flexGrow: 1 }}>
-                          <Typography variant="subtitle1" fontWeight="bold" noWrap>
-                            {song.title}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" noWrap>
-                            {song.artist}
-                          </Typography>
-                          {song.metadata?.tags && song.metadata.tags.length > 0 && (
-                            <Box sx={{ mt: 1 }}>
-                              <Chip
-                                label={song.metadata.tags[0]}
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                              />
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                  {localFiles.length > 4 && (
-                    <Grid item xs={12}>
-                      <Box sx={{ textAlign: 'center', mt: 2 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          + {localFiles.length - 4} more songs
-                        </Typography>
-                      </Box>
-                    </Grid>
-                  )}
-                </Grid>
-              ) : (
-                <Box sx={{ p: 4, textAlign: 'center' }}>
-                  <Typography variant="body1" color="text.secondary">
-                    No local files
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Click 'Add Local Files' to import songs from your computer
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Shared Projects Section */}
-      {sharedTrips.length > 0 && (
-        <>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, mt: 4 }}>
-            <Typography variant="h5" fontWeight="bold">
-              Shared with You
-            </Typography>
-          </Box>
-          <Grid container spacing={3}>
-            {sharedTrips.map((trip) => (
-              <Grid item xs={12} sm={6} md={4} key={trip.id}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    borderRadius: 3,
-                    overflow: 'hidden',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    transition: 'all 0.2s',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.15)',
-                      borderColor: 'secondary.main',
-                    },
-                    cursor: 'pointer',
-                    position: 'relative',
-                  }}
-                >
-                  <Box 
-                    onClick={() => handleTripClick(trip.id)}
-                    sx={{ height: '100%' }}
-                  >
-                    <CardMedia
-                      component="div"
-                      sx={{
-                        height: 140,
-                        bgcolor: 'background.default',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <AlbumIcon sx={{ fontSize: 60, color: 'text.secondary', opacity: 0.5 }} />
-                    </CardMedia>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom noWrap>
-                        {trip.name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }} noWrap>
-                        {trip.description || 'No description'}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <Chip
-                          size="small"
-                          label={trip.type === 'project' ? 'Project' : 'Playlist'}
-                          color={trip.type === 'project' ? 'primary' : 'secondary'}
-                        />
-                        <Chip
-                          size="small"
-                          label="Shared"
-                          color="info"
-                        />
-                      </Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <AccessTimeIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                        <Typography variant="caption" color="text.secondary">
-                          Updated {new Date(trip.updatedAt || trip.createdAt).toLocaleDateString()}
-                        </Typography>
-                      </Box>
-                    </CardContent>
-                  </Box>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </>
-      )}
-
-      {/* Upload Dialog */}
-      <Dialog 
-        open={showUploadDialog} 
-        onClose={() => !uploading && setShowUploadDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Upload Songs</DialogTitle>
-        <DialogContent>
-          <Box
-            {...getRootProps()}
-            sx={{
-              p: 3,
-              border: '2px dashed',
-              borderColor: isDragActive ? 'primary.main' : 'divider',
-              borderRadius: 2,
-              bgcolor: isDragActive ? alpha(theme.palette.primary.main, 0.05) : 'background.paper',
-              textAlign: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              '&:hover': {
-                borderColor: 'primary.main',
-                bgcolor: alpha(theme.palette.primary.main, 0.05),
-              },
-              mb: 2
-            }}
-          >
-            <input {...getInputProps()} />
-            <CloudUploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              {isDragActive ? 'Drop files here' : 'Drag & drop files here'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              or click to browse
-            </Typography>
-          </Box>
-          
-          {uploading && (
-            <Box sx={{ width: '100%', mt: 2 }}>
-              <Typography variant="body2" gutterBottom>
-                Uploading... {uploadProgress.toFixed(0)}%
-              </Typography>
-              <LinearProgress variant="determinate" value={uploadProgress} />
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowUploadDialog(false)} disabled={uploading}>
-            Cancel
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Playlist Dialog */}
-      <Dialog 
-        open={showPlaylistDialog} 
-        onClose={() => !creating && setShowPlaylistDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Create New Playlist</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            id="name"
-            label="Playlist Name"
-            type="text"
-            fullWidth
-            variant="outlined"
-            value={playlistName}
-            onChange={(e) => setPlaylistName(e.target.value)}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            margin="dense"
-            id="description"
-            label="Description"
-            type="text"
-            fullWidth
-            multiline
-            rows={3}
-            variant="outlined"
-            value={playlistDescription}
-            onChange={(e) => setPlaylistDescription(e.target.value)}
-            sx={{ mb: 2 }}
-          />
-          <FormControl fullWidth variant="outlined">
-            <InputLabel id="visibility-label">Visibility</InputLabel>
-            <Select
-              labelId="visibility-label"
-              id="visibility"
-              value={playlistVisibility}
-              onChange={handleVisibilityChange}
-              label="Visibility"
-            >
-              <MenuItem value="private">Private</MenuItem>
-              <MenuItem value="public">Public</MenuItem>
-              <MenuItem value="unlisted">Unlisted</MenuItem>
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowPlaylistDialog(false)} disabled={creating}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreatePlaylist} variant="contained" disabled={creating}>
-            {creating ? 'Creating...' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Analytics Dialog */}
-      <Dialog 
-        open={showAnalyticsDialog} 
-        onClose={() => setShowAnalyticsDialog(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>Global Analytics</DialogTitle>
-        <DialogContent>
-          {analyticsData ? (
-            <Box sx={{ mt: 2 }}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      borderRadius: 3,
-                      bgcolor: alpha(theme.palette.primary.main, 0.1),
-                      border: '1px solid',
-                      borderColor: alpha(theme.palette.primary.main, 0.2),
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <FolderIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                    <Typography variant="h4" fontWeight="bold" color="primary.main">
-                      {analyticsData.totalProjects}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Projects
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      borderRadius: 3,
-                      bgcolor: alpha(theme.palette.secondary.main, 0.1),
-                      border: '1px solid',
-                      borderColor: alpha(theme.palette.secondary.main, 0.2),
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <MusicNoteIcon sx={{ fontSize: 40, color: 'secondary.main', mb: 1 }} />
-                    <Typography variant="h4" fontWeight="bold" color="secondary.main">
-                      {analyticsData.totalSongs}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Songs
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      borderRadius: 3,
-                      bgcolor: alpha(theme.palette.success.main, 0.1),
-                      border: '1px solid',
-                      borderColor: alpha(theme.palette.success.main, 0.2),
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <PlaylistAddIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-                    <Typography variant="h4" fontWeight="bold" color="success.main">
-                      {analyticsData.totalPlaylists}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Playlists
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      borderRadius: 3,
-                      bgcolor: alpha(theme.palette.info.main, 0.1),
-                      border: '1px solid',
-                      borderColor: alpha(theme.palette.info.main, 0.2),
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <GroupAddIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
-                    <Typography variant="h4" fontWeight="bold" color="info.main">
-                      {analyticsData.totalCollaborators}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Collaborators
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-
-              <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
-                Projects by Month
-              </Typography>
-              <Box sx={{ height: 200, mb: 4 }}>
-                {/* Here you would add a chart component to visualize projects by month */}
-                <Typography variant="body2" color="text.secondary">
-                  Chart visualization would go here
-                </Typography>
-              </Box>
-
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Songs by Genre
-              </Typography>
-              <Box sx={{ height: 200, mb: 4 }}>
-                {/* Here you would add a chart component to visualize songs by genre */}
-                <Typography variant="body2" color="text.secondary">
-                  Chart visualization would go here
-                </Typography>
-              </Box>
-
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Top Collaborators
-              </Typography>
-              <List>
-                {analyticsData.topCollaborators.map((collaborator, index) => (
-                  <ListItem key={index}>
-                    <ListItemAvatar>
-                      <Avatar>{collaborator.userId.charAt(0)}</Avatar>
-                    </ListItemAvatar>
-                    <ListItemText 
-                      primary={collaborator.userId} 
-                      secondary={`${collaborator.count} projects`} 
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Box>
-          ) : (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-              <CircularProgress />
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setShowAnalyticsDialog(false)}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteConfirmOpen}
-        onClose={cancelDeleteTrip}
-        aria-labelledby="delete-dialog-title"
-        aria-describedby="delete-dialog-description"
-      >
-        <DialogTitle id="delete-dialog-title">
-          Delete Project
-        </DialogTitle>
-        <DialogContent>
-          <Typography id="delete-dialog-description">
-            Are you sure you want to delete "{tripToDelete?.name}"? This action cannot be undone and will delete all songs associated with this project.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelDeleteTrip} disabled={deletingTripId !== null}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={confirmDeleteTrip} 
-            color="error" 
-            variant="contained"
-            disabled={deletingTripId !== null}
-            startIcon={deletingTripId !== null ? <CircularProgress size={20} /> : <DeleteIcon />}
-          >
-            {deletingTripId !== null ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Folder Path Dialog */}
-      <Dialog
-        open={showPathDialog}
-        onClose={() => !scanningFiles && setShowPathDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Enter Folder Path</DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 2, mt: 2 }}>
-            <Typography variant="body1" gutterBottom>
-              Enter the path to your music folder:
-            </Typography>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Folder Path"
-              type="text"
-              fullWidth
-              variant="outlined"
-              value={folderPath}
-              onChange={(e) => setFolderPath(e.target.value)}
-              placeholder="e.g., C:\Music or /home/user/music"
-              disabled={scanningFiles}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button 
-            onClick={() => setShowPathDialog(false)} 
-            disabled={scanningFiles}
-          >
-            Cancel
-          </Button>
-          <Button 
-            onClick={handlePathSubmit}
-            variant="contained"
-            disabled={scanningFiles || !folderPath.trim()}
-          >
-            {scanningFiles ? 'Scanning...' : 'Scan Folder'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Create Project Dialog */}
-      {openDialog && (
-        <EmptyProjectPanel
-          tripId="new"
-          onClose={() => setOpenDialog(false)}
-          onProjectCreated={handleCreateProject}
-          isDialog={true}
-          mode="project"
-        />
-      )}
-    </Box>
+      <DashboardDialogs
+        {...uploadDialogProps}
+        showUploadDialog={showUploadDialog}
+        setShowUploadDialog={setShowUploadDialog}
+        uploading={uploading}
+        uploadProgress={uploadProgress}
+        onDrop={onDrop}
+        showPlaylistDialog={showPlaylistDialog}
+        setShowPlaylistDialog={setShowPlaylistDialog}
+        creating={creating}
+        playlistName={playlistName}
+        setPlaylistName={setPlaylistName}
+        playlistDescription={playlistDescription}
+        setPlaylistDescription={setPlaylistDescription}
+        playlistVisibility={playlistVisibility}
+        handleVisibilityChange={handleVisibilityChange}
+        handleCreatePlaylist={handleCreatePlaylist}
+        showAnalyticsDialog={showAnalyticsDialog}
+        setShowAnalyticsDialog={setShowAnalyticsDialog}
+        analyticsData={analyticsData}
+        deleteConfirmOpen={deleteConfirmOpen}
+        setDeleteConfirmOpen={setDeleteConfirmOpen}
+        tripToDelete={tripToDelete}
+        deletingTripId={deletingTripId}
+        confirmDeleteTrip={confirmDeleteTrip}
+        cancelDeleteTrip={cancelDeleteTrip}
+        showPathDialog={showPathDialog}
+        setShowPathDialog={setShowPathDialog}
+        scanningFiles={scanningFiles}
+        folderPath={folderPath}
+        setFolderPath={setFolderPath}
+        handlePathSubmit={handlePathSubmit}
+      />
+    </Container>
   );
 };
 

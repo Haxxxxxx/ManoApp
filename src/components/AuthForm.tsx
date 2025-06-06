@@ -6,22 +6,19 @@ import {
   Typography, 
   Paper, 
   Alert,
-  Container
+  Container,
+  CircularProgress
 } from '@mui/material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks';
 
 const AuthForm = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { login, signup } = useAuth();
+  const { login, signup, loading, error } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
 
     try {
       if (isSignUp) {
@@ -30,9 +27,8 @@ const AuthForm = () => {
         await login(email, password);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
+      // Error is already handled by the useAuth hook
+      console.error('Auth error:', err);
     }
   };
 
@@ -52,15 +48,35 @@ const AuthForm = () => {
             p: 4,
             width: '100%',
             maxWidth: 400,
+            position: 'relative',
           }}
         >
+          {loading && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                zIndex: 1,
+              }}
+            >
+              <CircularProgress />
+            </Box>
+          )}
+
           <Typography variant="h4" component="h1" gutterBottom align="center">
             {isSignUp ? 'Sign Up' : 'Sign In'}
           </Typography>
 
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
+              {error.message}
             </Alert>
           )}
 
@@ -73,6 +89,7 @@ const AuthForm = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={loading}
             />
             <TextField
               label="Password"
@@ -82,6 +99,7 @@ const AuthForm = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={loading}
             />
             <Button
               type="submit"

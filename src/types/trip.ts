@@ -1,23 +1,22 @@
 import { Song } from './song';
 
+export type TripStatus = 'draft' | 'in-progress' | 'completed' | 'archived' | 'published';
+
 export interface Trip {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   userId: string;
-  songs: Song[];
   createdAt: string;
-  updatedAt: string;
-  collaborators: string[];
-  tags: string[];
-  status: 'draft' | 'published';
-  coverImageUrl?: string;
-  type?: 'project' | 'playlist';
-  visibility?: 'private' | 'public' | 'unlisted';
-  metadata?: {
-    genre?: string[];
-    releaseDate?: string;
-    language?: string;
-    [key: string]: any;
-  };
+  updatedAt?: string;
+  songs?: Song[];
+  collaborators?: string[];
+  tags?: string[];
+  coverImage?: string;
+  type?: 'project' | 'playlist' | 'single' | 'album';
+  status?: TripStatus;
+  isPrivate?: boolean;
+  template?: string;
+  metadata?: Record<string, any>;
+  publishedAt?: string;
 } 

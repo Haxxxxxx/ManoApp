@@ -179,6 +179,7 @@ export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
 
     // Create the song document
     const docRef = await addDoc(collection(db, songsCollection), songData);
+    const createdSong = { ...songData, id: docRef.id };
 
     // Create a folder reference in storage
     if (storage) {
@@ -192,15 +193,19 @@ export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
       }
     }
 
-    console.log('Song created successfully:', {
-      id: docRef.id,
-      ...songData
+    // Update the trip's songs array
+    const tripRef = doc(db, tripsCollection, tripId);
+    const tripData = tripDoc.data();
+    const updatedSongs = [...(tripData.songs || []), createdSong];
+    
+    await updateDoc(tripRef, { 
+      songs: updatedSongs,
+      updatedAt: new Date().toISOString()
     });
 
-    return { 
-      ...songData, 
-      id: docRef.id
-    };
+    console.log('Song created successfully:', createdSong);
+
+    return createdSong;
   } catch (error) {
     console.error('Error creating song:', error);
     throw error;
@@ -636,32 +641,21 @@ export const updateTripCollaborators = async (tripId: string, collaboratorIds: s
  */
 export const getCollaborativeTrips = async (userId: string): Promise<Trip[]> => {
   try {
-    console.log('Current auth user:', auth.currentUser?.uid);
-    console.log('Requested userId:', userId);
+    // Create a query that gets trips where:
+    // 1. The user is in the collaborators array
+    // 2. The user is NOT the owner
+    const q = query(
+      collection(db, tripsCollection),
+      where('collaborators', 'array-contains', userId),
+      where('userId', '!=', userId)
+    );
     
-    // Get all trips
-    const tripsSnapshot = await getDocs(collection(db, tripsCollection));
+    const tripsSnapshot = await getDocs(q);
     
-    // Filter trips where user is a collaborator but not the owner
-    const collaborativeTrips = tripsSnapshot.docs
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Trip))
-      .filter(trip => {
-        const isCollaborator = Array.isArray(trip.collaborators) && trip.collaborators.includes(userId);
-        const isNotOwner = trip.userId !== userId;
-        console.log(`Trip ${trip.id}:`, {
-          isCollaborator,
-          isNotOwner,
-          collaborators: trip.collaborators,
-          userId: trip.userId
-        });
-        return isCollaborator && isNotOwner;
-      });
-
-    console.log('Found collaborative trips:', collaborativeTrips);
-    return collaborativeTrips;
+    return tripsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as Trip));
   } catch (error) {
     console.error('Error fetching collaborative trips:', error);
     throw error;

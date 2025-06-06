@@ -22,7 +22,11 @@ import {
   CardMedia,
   CardContent,
   InputAdornment,
-  useTheme
+  useTheme,
+  Slider,
+  alpha,
+  Fade,
+  Zoom
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
@@ -33,9 +37,15 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ImageIcon from '@mui/icons-material/Image';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
+import SkipNextIcon from '@mui/icons-material/SkipNext';
+import SkipPreviousIcon from '@mui/icons-material/SkipPrevious';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
+import VolumeOffIcon from '@mui/icons-material/VolumeOff';
 import { Song } from '../../types/song';
 import { updateSong, getSong } from '../../services/firebaseService';
 import { getAudioUrl, uploadCoverArt } from '../../services/storageService';
+import { getStorage, ref, getDownloadURL } from 'firebase/storage';
+import { audioService } from '../../services/audioService';
 
 // Add this type definition after the imports and before the TabPanelProps interface
 type SongMetadata = {
@@ -106,6 +116,10 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   const [isLocalFile, setIsLocalFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const volumeSliderRef = useRef<HTMLDivElement>(null);
 
   // Default tags for different genres and moods
   const defaultTags = {
@@ -316,154 +330,77 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     }
   };
 
+  // Add function to get authenticated URL
+  const getAuthenticatedUrl = async (filePath: string): Promise<string> => {
+    try {
+      // If it's already a full URL, try to get a fresh authenticated URL
+      if (filePath.startsWith('https://')) {
+        const storage = getStorage();
+        const pathWithoutParams = filePath.split('?')[0];
+        const storagePath = decodeURIComponent(pathWithoutParams.split('/o/')[1]);
+        const storageRef = ref(storage, storagePath);
+        return await getDownloadURL(storageRef);
+      }
+      return filePath;
+    } catch (error) {
+      console.error('Error getting authenticated URL:', error);
+      return filePath;
+    }
+  };
+
+  // Update useEffect for audio initialization
   useEffect(() => {
-    // Create new audio element
-    const newAudio = new Audio();
-    
-    // Function to set audio source
-    const initializeAudioSource = async () => {
+    const initializeAudio = async () => {
       console.log('Initializing audio source');
       
-      // First check if we have a stored blob URL
-      const storedBlobUrl = getBlobUrl(song.id);
-      if (storedBlobUrl) {
-        console.log('Using stored blob URL:', storedBlobUrl);
-        newAudio.src = storedBlobUrl;
-        newAudio.load();
-        setAudioUrl(storedBlobUrl);
-        blobUrlRef.current = storedBlobUrl;
+      if (!song.filePath) {
+        console.warn('No file path available');
         return;
       }
-      
-      // Check if we have a valid file path
-      if (song.filePath) {
-        if (song.filePath.startsWith('blob:')) {
-          console.log('Using existing blob URL:', song.filePath);
-          newAudio.src = song.filePath;
-          newAudio.load();
-          setAudioUrl(song.filePath);
-          blobUrlRef.current = song.filePath;
-          return;
-        } else {
-          console.log('Using file path:', song.filePath);
-          newAudio.src = song.filePath;
-          newAudio.load();
-          setAudioUrl(song.filePath);
-          return;
-        }
-      }
-      
-      // Try to get file info from localStorage
-      const fileInfo = getFileDataFromLocalStorage();
-      if (fileInfo) {
-        console.log('Found file info in localStorage:', fileInfo);
-        setError('Please select the audio file again to play this song');
-        return;
-      }
-      
-      // If we have a download URL, use that
-      if (song.downloadUrl) {
-        console.log('Using download URL:', song.downloadUrl);
-        newAudio.src = song.downloadUrl;
-        newAudio.load();
-        setAudioUrl(song.downloadUrl);
-        return;
-      }
-      
-      console.error('No valid audio source found');
-      setError('No valid audio source found');
-    };
 
-    // Add error handling
-    const handleAudioError = (e: Event) => {
-      const audioElement = e.target as HTMLAudioElement;
-      console.error('Audio error details:', {
-        error: audioElement.error,
-        currentSrc: audioElement.currentSrc,
-        networkState: audioElement.networkState,
-        readyState: audioElement.readyState,
-        paused: audioElement.paused,
-        ended: audioElement.ended,
-        duration: audioElement.duration,
-        volume: audioElement.volume,
-        muted: audioElement.muted,
-        playbackRate: audioElement.playbackRate,
-        defaultMuted: audioElement.defaultMuted,
-        defaultPlaybackRate: audioElement.defaultPlaybackRate,
-        errorCode: audioElement.error?.code,
-        errorMessage: audioElement.error?.message
-      });
+      try {
+        // Create audio element using audioService
+        const audio = await audioService.createAudioElement(song.filePath);
+        
+        // Add event listeners
+        audio.addEventListener('loadstart', () => console.log('Audio loading started'));
+        audio.addEventListener('loadedmetadata', () => {
+          console.log('Audio metadata loaded, duration:', audio.duration);
+          setDuration(audio.duration);
+        });
+        audio.addEventListener('canplay', () => console.log('Audio can play'));
+        audio.addEventListener('canplaythrough', () => console.log('Audio can play through'));
+        audio.addEventListener('progress', () => console.log('Audio loading in progress'));
+        audio.addEventListener('error', (e) => {
+          console.error('Audio error details:', {
+            error: audio.error,
+            currentSrc: audio.currentSrc,
+            networkState: audio.networkState,
+            readyState: audio.readyState,
+            paused: audio.paused,
+          });
+          setError('Failed to load audio file. Please try again.');
+        });
+        
+        // Store the audio element
+        setAudioElement(audio);
+        audioRef.current = audio;
 
-      // Clear the current source before trying to reinitialize
-      audioElement.removeAttribute('src');
-      audioElement.load();
-
-      let errorMessage = 'Failed to load audio file';
-      if (audioElement.error) {
-        switch (audioElement.error.code) {
-          case MediaError.MEDIA_ERR_ABORTED:
-            errorMessage = 'Audio playback was aborted';
-            break;
-          case MediaError.MEDIA_ERR_NETWORK:
-            errorMessage = 'A network error occurred while loading the audio';
-            break;
-          case MediaError.MEDIA_ERR_DECODE:
-            errorMessage = 'The audio file is corrupted or uses an unsupported format';
-            break;
-          case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-            errorMessage = 'The audio format is not supported by your browser';
-            break;
-          default:
-            errorMessage = `Audio error: ${audioElement.error.message || 'Unknown error'}`;
-        }
-      }
-      
-      setError(errorMessage);
-      setIsPlaying(false);
-    };
-
-    // Set up audio event listeners
-    newAudio.addEventListener('timeupdate', () => setCurrentTime(newAudio.currentTime));
-    newAudio.addEventListener('loadedmetadata', () => {
-      console.log('Audio metadata loaded, duration:', newAudio.duration);
-      setDuration(newAudio.duration);
-      setError(null); // Clear any previous errors
-    });
-    newAudio.addEventListener('ended', () => {
-      console.log('Audio playback ended');
-      setIsPlaying(false);
-    });
-    newAudio.addEventListener('error', handleAudioError);
-    newAudio.addEventListener('loadstart', () => console.log('Audio loading started'));
-    newAudio.addEventListener('progress', () => console.log('Audio loading in progress'));
-    newAudio.addEventListener('canplay', () => {
-      console.log('Audio can play');
-      setError(null); // Clear any previous errors
-    });
-    newAudio.addEventListener('canplaythrough', () => console.log('Audio can play through'));
-
-    // Initialize the audio source
-    initializeAudioSource();
-
-    // Set the audio element
-    setAudioElement(newAudio);
-
-    // Clean up function
-    return () => {
-      console.log('Cleaning up audio element');
-      if (newAudio) {
-        newAudio.pause();
-        newAudio.src = '';
-        newAudio.load();
-        newAudio.remove();
-      }
-      // Only revoke the blob URL when the component is unmounted
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        localStorage.removeItem(`blobUrl_${song.id}`);
+        // Clean up function
+        return () => {
+          console.log('Cleaning up audio element');
+          audio.pause();
+          audio.src = '';
+          audio.load();
+        };
+      } catch (error) {
+        console.error('Error initializing audio:', error);
+        setError('Failed to initialize audio. Please try again.');
       }
     };
-  }, [song]);
+
+    initializeAudio();
+  }, [song.filePath]);
 
   const handlePlayPause = () => {
     if (!audioElement) {
@@ -521,19 +458,10 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   };
 
   const formatDuration = (duration: string | number) => {
-    // Convert duration to string if it's a number
-    const durationStr = duration?.toString() || '0';
-    
-    // If duration is already formatted (e.g., "3:45"), return as is
-    if (durationStr.includes(':')) {
-      return durationStr;
+    if (typeof duration === 'string' && duration.includes(':')) {
+      return duration;
     }
-    
-    // Convert to number and format
-    const seconds = Math.floor(parseFloat(durationStr));
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    return audioService.formatDuration(Number(duration));
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -815,6 +743,34 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     setShowTagSuggestions(false);
   }, [song]);
 
+  const handleVolumeChange = (event: Event, newValue: number | number[]) => {
+    const volumeValue = newValue as number;
+    setVolume(volumeValue);
+    if (audioElement) {
+      audioElement.volume = volumeValue;
+    }
+  };
+
+  const handleMuteToggle = () => {
+    if (audioElement) {
+      if (isMuted) {
+        audioElement.volume = volume;
+        setIsMuted(false);
+      } else {
+        audioElement.volume = 0;
+        setIsMuted(true);
+      }
+    }
+  };
+
+  const handleProgressChange = (event: Event, newValue: number | number[]) => {
+    if (audioElement) {
+      const time = (newValue as number) * audioElement.duration;
+      audioElement.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -827,6 +783,11 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
         boxShadow: 3,
         maxHeight: '80vh',
         overflow: 'auto',
+        transition: 'transform 0.3s ease-in-out',
+        transform: 'translateY(0)',
+        '&:hover': {
+          transform: 'translateY(-4px)',
+        },
       }}
     >
       <Paper
@@ -834,6 +795,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
         sx={{
           p: 3,
           borderRadius: '16px 16px 0 0',
+          background: theme => `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -893,209 +855,444 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
         <TabPanel value={activeTab} index={0}>
           <Grid container spacing={3}>
             <Grid item xs={12}>
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'background.default',
-                  borderRadius: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 2
-                }}
-              >
-                <IconButton 
-                  onClick={handlePlayPause}
-                  disabled={isLoading || !audioUrl || !audioElement}
-                  color="primary"
+              <Zoom in={true}>
+                <Paper 
+                  elevation={0} 
                   sx={{ 
-                    width: 56, 
-                    height: 56,
-                    bgcolor: 'primary.main',
-                    color: 'white',
+                    p: 3, 
+                    bgcolor: 'background.default',
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    transition: 'all 0.3s ease-in-out',
                     '&:hover': {
-                      bgcolor: 'primary.dark'
+                      borderColor: 'primary.main',
+                      boxShadow: theme => `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`,
                     }
                   }}
                 >
-                  {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-                </IconButton>
-                {isLoading ? (
-                  <CircularProgress size={24} />
-                ) : (
-                  <Typography variant="h5" fontWeight="bold">
-                    {isEditing ? (
-                      <TextField
-                        value={editedSong.title}
-                        onChange={(e) => setEditedSong({ ...editedSong, title: e.target.value })}
-                        fullWidth
-                        variant="standard"
-                        sx={{ 
-                          '& .MuiInputBase-input': {
-                            fontSize: '1.5rem',
-                            fontWeight: 'bold'
-                          }
-                        }}
-                      />
-                    ) : (
-                      song.title
-                    )}
-                  </Typography>
-                )}
-              </Paper>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                        Basic Information
+                      </Typography>
+                      <Stack spacing={2}>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Title</Typography>
+                          {isEditing ? (
+                            <TextField
+                              value={editedSong.title}
+                              onChange={(e) => setEditedSong({ ...editedSong, title: e.target.value })}
+                              fullWidth
+                              variant="outlined"
+                              size="small"
+                              sx={{ mt: 0.5 }}
+                            />
+                          ) : (
+                            <Typography variant="body1">{song.title}</Typography>
+                          )}
+                        </Box>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Artist</Typography>
+                          {isEditing ? (
+                            <TextField
+                              value={editedSong.artist}
+                              onChange={(e) => setEditedSong({ ...editedSong, artist: e.target.value })}
+                              fullWidth
+                              variant="outlined"
+                              size="small"
+                              sx={{ mt: 0.5 }}
+                            />
+                          ) : (
+                            <Typography variant="body1">{song.artist}</Typography>
+                          )}
+                        </Box>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Duration</Typography>
+                          <Typography variant="body1">{formatDuration(song.duration)}</Typography>
+                        </Box>
+                      </Stack>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                        Technical Details
+                      </Typography>
+                      <Stack spacing={2}>
+                        {song.metadata?.bpm && (
+                          <Box>
+                            <Typography variant="subtitle2" color="text.secondary">BPM</Typography>
+                            <Typography variant="body1">{song.metadata.bpm}</Typography>
+                          </Box>
+                        )}
+                        {song.metadata?.key && (
+                          <Box>
+                            <Typography variant="subtitle2" color="text.secondary">Key</Typography>
+                            <Typography variant="body1">{song.metadata.key}</Typography>
+                          </Box>
+                        )}
+                        {song.metadata?.releaseDate && (
+                          <Box>
+                            <Typography variant="subtitle2" color="text.secondary">Release Date</Typography>
+                            <Typography variant="body1">
+                              {new Date(song.metadata.releaseDate).toLocaleDateString()}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Stack>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </Zoom>
             </Grid>
 
             <Grid item xs={12}>
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'background.default',
-                  borderRadius: 2
-                }}
-              >
-                <Typography variant="subtitle1" color="text.secondary" gutterBottom>Artist</Typography>
-                {isEditing ? (
-                  <TextField
-                    value={editedSong.artist}
-                    onChange={(e) => setEditedSong({ ...editedSong, artist: e.target.value })}
-                    fullWidth
-                    variant="standard"
+              <Fade in={true} timeout={500}>
+                <Paper 
+                  elevation={0} 
+                  sx={{ 
+                    p: 3, 
+                    bgcolor: 'background.default',
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    transition: 'all 0.3s ease-in-out',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      boxShadow: theme => `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`,
+                    }
+                  }}
+                >
+                  <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                    Genres & Tags
+                  </Typography>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Genres
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {editedSong.metadata?.genre?.map((genre) => (
+                        <Chip
+                          key={genre}
+                          label={genre}
+                          onDelete={isEditing ? () => handleRemoveGenre(genre) : undefined}
+                          sx={{
+                            borderRadius: 2,
+                            bgcolor: 'primary.light',
+                            color: 'primary.contrastText',
+                            '& .MuiChip-deleteIcon': {
+                              color: 'primary.contrastText',
+                              '&:hover': {
+                                color: 'error.main'
+                              }
+                            }
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Tags
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {editedSong.metadata?.tags?.map((tag) => (
+                        <Chip
+                          key={tag}
+                          label={tag}
+                          onDelete={isEditing ? () => handleRemoveTag(tag) : undefined}
+                          sx={{
+                            borderRadius: 2,
+                            bgcolor: 'secondary.light',
+                            color: 'secondary.contrastText',
+                            '& .MuiChip-deleteIcon': {
+                              color: 'secondary.contrastText',
+                              '&:hover': {
+                                color: 'error.main'
+                              }
+                            }
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                </Paper>
+              </Fade>
+            </Grid>
+
+            {editedSong.metadata?.featuring && editedSong.metadata.featuring.length > 0 && (
+              <Grid item xs={12}>
+                <Fade in={true} timeout={700}>
+                  <Paper 
+                    elevation={0} 
                     sx={{ 
-                      '& .MuiInputBase-input': {
-                        fontSize: '1.1rem'
+                      p: 3, 
+                      bgcolor: 'background.default',
+                      borderRadius: 3,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      transition: 'all 0.3s ease-in-out',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        boxShadow: theme => `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`,
                       }
                     }}
-                  />
-                ) : (
-                  <Typography variant="h6">{song.artist}</Typography>
-                )}
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'background.default',
-                  borderRadius: 2
-                }}
-              >
-                <Typography variant="subtitle1" color="text.secondary" gutterBottom>Duration</Typography>
-                <Typography variant="h6">{formatDuration(song.duration)}</Typography>
-              </Paper>
-            </Grid>
+                  >
+                    <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                      Featuring Artists
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {editedSong.metadata.featuring.map((feat) => (
+                        <Chip
+                          key={feat}
+                          label={feat}
+                          onDelete={isEditing ? () => handleRemoveFeat(feat) : undefined}
+                          sx={{
+                            borderRadius: 2,
+                            bgcolor: 'info.light',
+                            color: 'info.contrastText',
+                            '& .MuiChip-deleteIcon': {
+                              color: 'info.contrastText',
+                              '&:hover': {
+                                color: 'error.main'
+                              }
+                            }
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  </Paper>
+                </Fade>
+              </Grid>
+            )}
           </Grid>
         </TabPanel>
 
         <TabPanel value={activeTab} index={1}>
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              p: 2, 
-              bgcolor: 'background.default',
-              borderRadius: 2
-            }}
-          >
-            <TextField
-              label="Lyrics"
-              multiline
-              rows={15}
-              fullWidth
-              value={editedSong.metadata?.lyrics || ''}
-              onChange={handleLyricsChange}
-              disabled={!isEditing}
-              variant="outlined"
+          <Fade in={true} timeout={500}>
+            <Paper 
+              elevation={0} 
               sx={{ 
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2
+                p: 3, 
+                bgcolor: 'background.default',
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                transition: 'all 0.3s ease-in-out',
+                '&:hover': {
+                  borderColor: 'primary.main',
+                  boxShadow: theme => `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`,
                 }
               }}
-            />
-          </Paper>
+            >
+              <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                Lyrics
+              </Typography>
+              {isEditing ? (
+                <TextField
+                  multiline
+                  fullWidth
+                  rows={10}
+                  value={editedSong.metadata?.lyrics || ''}
+                  onChange={handleLyricsChange}
+                  variant="outlined"
+                  placeholder="Enter song lyrics..."
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                      fontFamily: 'monospace',
+                      fontSize: '1rem',
+                      lineHeight: 1.6,
+                    }
+                  }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: 'background.paper',
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    fontFamily: 'monospace',
+                    fontSize: '1rem',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    minHeight: 200,
+                  }}
+                >
+                  {editedSong.metadata?.lyrics || 'No lyrics available'}
+                </Box>
+              )}
+            </Paper>
+          </Fade>
         </TabPanel>
 
         <TabPanel value={activeTab} index={2}>
           <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'background.default',
-                  borderRadius: 2
-                }}
-              >
-                <Typography variant="h6" gutterBottom fontWeight="bold">Images</Typography>
-                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                  {editedSong.imagePath && (
-                    <Card sx={{ maxWidth: 345, borderRadius: 2, overflow: 'hidden' }}>
-                      <CardMedia
-                        component="img"
-                        height="200"
-                        image={editedSong.imagePath}
-                        alt={editedSong.title}
-                      />
-                      <CardContent>
-                        <Typography variant="body2" color="text.secondary">Cover Art</Typography>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {isEditing && (
-                    <Button
-                      variant="outlined"
-                      component="label"
-                      startIcon={<ImageIcon />}
-                      sx={{ 
-                        height: 200, 
-                        width: 200, 
-                        borderStyle: 'dashed',
-                        borderRadius: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 1
-                      }}
-                    >
-                      <ImageIcon sx={{ fontSize: 40 }} />
-                      <Typography>Upload Image</Typography>
-                      <input
-                        type="file"
-                        hidden
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                      />
-                    </Button>
-                  )}
-                </Box>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
-                  bgcolor: 'background.default',
-                  borderRadius: 2
-                }}
-              >
-                <Typography variant="h6" gutterBottom fontWeight="bold">Videos</Typography>
-                <TextField
-                  label="Video URL"
-                  fullWidth
-                  value={editedSong.metadata?.videoUrl || ''}
-                  onChange={handleVideoUrlChange}
-                  disabled={!isEditing}
-                  placeholder="Enter YouTube or Vimeo URL"
-                  variant="outlined"
+            <Grid item xs={12} md={6}>
+              <Zoom in={true}>
+                <Paper 
+                  elevation={0} 
                   sx={{ 
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: 2
+                    p: 3, 
+                    bgcolor: 'background.default',
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    transition: 'all 0.3s ease-in-out',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      boxShadow: theme => `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`,
                     }
                   }}
-                />
-              </Paper>
+                >
+                  <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                    Cover Art
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                    {editedSong.imagePath ? (
+                      <Card 
+                        sx={{ 
+                          maxWidth: 300,
+                          borderRadius: 2,
+                          overflow: 'hidden',
+                          transition: 'transform 0.3s ease-in-out',
+                          '&:hover': {
+                            transform: 'scale(1.02)',
+                          }
+                        }}
+                      >
+                        <CardMedia
+                          component="img"
+                          height="300"
+                          image={editedSong.imagePath}
+                          alt={editedSong.title}
+                          sx={{ objectFit: 'cover' }}
+                        />
+                        <CardContent>
+                          <Typography variant="body2" color="text.secondary">
+                            Cover Art
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Box
+                        sx={{
+                          width: 300,
+                          height: 300,
+                          bgcolor: 'background.paper',
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '2px dashed',
+                          borderColor: 'divider',
+                        }}
+                      >
+                        <ImageIcon sx={{ fontSize: 60, color: 'text.secondary', opacity: 0.5 }} />
+                      </Box>
+                    )}
+                    {isEditing && (
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        startIcon={<ImageIcon />}
+                        sx={{ 
+                          height: 'fit-content',
+                          alignSelf: 'center',
+                          borderRadius: 2,
+                          borderStyle: 'dashed',
+                        }}
+                      >
+                        {editedSong.imagePath ? 'Change Image' : 'Upload Image'}
+                        <input
+                          type="file"
+                          hidden
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                        />
+                      </Button>
+                    )}
+                  </Box>
+                </Paper>
+              </Zoom>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Fade in={true} timeout={700}>
+                <Paper 
+                  elevation={0} 
+                  sx={{ 
+                    p: 3, 
+                    bgcolor: 'background.default',
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    transition: 'all 0.3s ease-in-out',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      boxShadow: theme => `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`,
+                    }
+                  }}
+                >
+                  <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                    Video
+                  </Typography>
+                  {isEditing ? (
+                    <TextField
+                      fullWidth
+                      value={editedSong.metadata?.videoUrl || ''}
+                      onChange={handleVideoUrlChange}
+                      placeholder="Enter video URL (YouTube, Vimeo, etc.)"
+                      variant="outlined"
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 2,
+                        }
+                      }}
+                    />
+                  ) : editedSong.metadata?.videoUrl ? (
+                    <Box
+                      sx={{
+                        position: 'relative',
+                        paddingTop: '56.25%', // 16:9 aspect ratio
+                        borderRadius: 2,
+                        overflow: 'hidden',
+                        bgcolor: 'background.paper',
+                      }}
+                    >
+                      <iframe
+                        src={editedSong.metadata.videoUrl}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          border: 'none',
+                        }}
+                        allowFullScreen
+                      />
+                    </Box>
+                  ) : (
+                    <Box
+                      sx={{
+                        p: 4,
+                        bgcolor: 'background.paper',
+                        borderRadius: 2,
+                        textAlign: 'center',
+                        border: '2px dashed',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <VideoLibraryIcon sx={{ fontSize: 60, color: 'text.secondary', opacity: 0.5, mb: 2 }} />
+                      <Typography variant="body1" color="text.secondary">
+                        No video available
+                      </Typography>
+                    </Box>
+                  )}
+                </Paper>
+              </Fade>
             </Grid>
           </Grid>
         </TabPanel>
@@ -1468,6 +1665,120 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
           accept="audio/*"
           onChange={handleFileSelect}
         />
+
+        {/* Audio Player Section */}
+        <Box sx={{ mb: 3 }}>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <IconButton 
+                  onClick={handlePlayPause}
+                  disabled={isLoading || !audioUrl || !audioElement}
+                  color="primary"
+                  sx={{ 
+                    width: 56, 
+                    height: 56,
+                    bgcolor: 'primary.main',
+                    color: 'white',
+                    '&:hover': {
+                      bgcolor: 'primary.dark',
+                      transform: 'scale(1.1)',
+                    },
+                    transition: 'all 0.2s ease-in-out',
+                  }}
+                >
+                  {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+                </IconButton>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h5" fontWeight="bold" noWrap>
+                    {isEditing ? (
+                      <TextField
+                        value={editedSong.title}
+                        onChange={(e) => setEditedSong({ ...editedSong, title: e.target.value })}
+                        fullWidth
+                        variant="standard"
+                        sx={{ 
+                          '& .MuiInputBase-input': {
+                            fontSize: '1.5rem',
+                            fontWeight: 'bold'
+                          }
+                        }}
+                      />
+                    ) : (
+                      song.title
+                    )}
+                  </Typography>
+                  <Typography variant="subtitle1" color="text.secondary" noWrap>
+                    {song.artist}
+                  </Typography>
+                </Box>
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {formatDuration(currentTime)}
+                </Typography>
+                <Slider
+                  value={currentTime / (duration || 1)}
+                  onChange={handleProgressChange}
+                  sx={{
+                    color: 'primary.main',
+                    '& .MuiSlider-thumb': {
+                      width: 12,
+                      height: 12,
+                      transition: '0.2s',
+                      '&:hover, &.Mui-focusVisible': {
+                        boxShadow: '0px 0px 0px 8px rgb(117 117 117 / 16%)',
+                      },
+                    },
+                    '& .MuiSlider-track': {
+                      transition: '0.2s',
+                    },
+                  }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  {formatDuration(duration)}
+                </Typography>
+                <Box sx={{ position: 'relative' }}>
+                  <IconButton
+                    onClick={handleMuteToggle}
+                    onMouseEnter={() => setShowVolumeSlider(true)}
+                    onMouseLeave={() => setShowVolumeSlider(false)}
+                  >
+                    {isMuted ? <VolumeOffIcon /> : <VolumeUpIcon />}
+                  </IconButton>
+                  <Fade in={showVolumeSlider}>
+                    <Box
+                      ref={volumeSliderRef}
+                      sx={{
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        bgcolor: 'background.paper',
+                        p: 1,
+                        borderRadius: 1,
+                        boxShadow: 1,
+                        width: 100,
+                      }}
+                    >
+                      <Slider
+                        orientation="vertical"
+                        value={volume}
+                        onChange={handleVolumeChange}
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        sx={{ height: 100 }}
+                      />
+                    </Box>
+                  </Fade>
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
+        </Box>
       </Paper>
     </Box>
   );

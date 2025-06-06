@@ -231,7 +231,7 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
             </ListItem>
           </List>
         </Collapse>
-        
+
         <ListItem disablePadding>
           <ListItemButton onClick={() => setSharedTripsExpanded(!sharedTripsExpanded)}>
             <ListItemIcon>

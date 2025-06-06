@@ -3,30 +3,27 @@ export interface Song {
   title: string;
   artist: string;
   duration: string | number;
-  filePath?: string;
+  filePath: string;
   imagePath?: string;
   downloadUrl?: string;
   file?: File;
   projectPath?: string;
   userId: string;
-  metadata?: {
-    bpm?: number;
-    key?: string;
-    genre?: string[];
-    tags?: string[];
-    releaseDate?: string;
-    source?: 'local' | 'remote' | 'upload';
-    _source?: string;
-    _originalFileName?: string;
-    _fileSize?: number;
-    _lastModified?: number;
-    _file?: File;
-    featuring?: string[];
-    lyrics?: string;
-    videoUrl?: string;
-    base64Data?: string;
-    originalFileName?: string;
-    lastModified?: number;
-  };
+  metadata?: SongMetadata;
   notes?: string;
-} 
+}
+
+export type SongMetadata = {
+  bpm?: number;
+  key?: string;
+  genre?: string[];
+  tags?: string[];
+  releaseDate?: string;
+  source?: 'local' | 'remote' | 'upload';
+  featuring?: string[];
+  lyrics?: string;
+  videoUrl?: string;
+  _originalFileName?: string;
+  _fileSize?: number;
+  _lastModified?: number;
+}; 

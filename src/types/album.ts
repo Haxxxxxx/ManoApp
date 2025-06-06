@@ -2,7 +2,8 @@ export interface AlbumSong {
   id: string;
   title: string;
   artist: string;
-  duration: number;
+  duration: number;  // Duration in seconds
+  filePath?: string;
   metadata?: {
     source?: 'local' | 'project' | 'firebase';
     projectName?: string;
@@ -29,6 +30,6 @@ export interface Album {
   coverImage: string | null;
   selectedPlatforms: string[];
   songs: AlbumSong[];
-  createdAt?: Date;
-  updatedAt?: Date;
+  createdAt: string;
+  updatedAt: string;
 } 

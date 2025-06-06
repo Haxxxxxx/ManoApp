@@ -38,7 +38,14 @@ service cloud.firestore {
         resource.data.userId == request.auth.uid || 
         (resource.data.collaborators is list && request.auth.uid in resource.data.collaborators)
       );
-      allow list: if isAuthenticated();
+      // Allow listing trips with specific queries for collaborators
+      allow list: if isAuthenticated() && (
+        // Allow listing own trips
+        request.query.filters.userId == request.auth.uid ||
+        // Allow listing collaborative trips
+        (request.query.filters['collaborators'] is list && 
+         request.auth.uid in request.query.filters['collaborators'])
+      );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||

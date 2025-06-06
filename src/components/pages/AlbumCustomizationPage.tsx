@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -32,7 +32,8 @@ import {
   Tabs,
   Tab,
   CircularProgress,
-  Alert
+  Alert,
+  InputAdornment
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import {
@@ -49,7 +50,8 @@ import {
   Folder as FolderIcon,
   Cloud as CloudIcon,
   Storage as StorageIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  Clear as ClearIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -59,10 +61,13 @@ import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautif
 import { getUserSongs } from '../../services/firebaseService';
 import { createAlbum, getAlbum, updateAlbum, deleteAlbum } from '../../services/firebaseService';
 import type { Album, AlbumSong } from '../../services/firebaseService';
+import { debounce } from 'lodash';
+import { formatDuration } from '../../utils/formatters';
 
-type SongSource = 'local' | 'remote' | 'upload';
+type SongSource = 'local' | 'project' | 'firebase';
 
-interface ExtendedSong extends Omit<Song, 'metadata'> {
+interface ExtendedSong extends Omit<AlbumSong, 'duration' | 'metadata'> {
+  duration: string | number;
   metadata?: {
     source?: SongSource;
     projectName?: string;
@@ -74,10 +79,7 @@ interface ExtendedSong extends Omit<Song, 'metadata'> {
     featuring?: string[];
     lyrics?: string;
     videoUrl?: string;
-    base64Data?: string;
-    originalFileName?: string;
-    fileSize?: number;
-    lastModified?: number;
+    filePath?: string;
   };
 }
 
@@ -87,6 +89,24 @@ const platforms = [
   { id: 'amazon', name: 'Amazon Music', color: '#00A8E1' },
   { id: 'youtube', name: 'YouTube Music', color: '#FF0000' },
 ];
+
+const TITLE_MAX_LENGTH = 100;
+const DESCRIPTION_MAX_LENGTH = 500;
+const GENRE_MAX_LENGTH = 50;
+
+interface FieldError {
+  error: boolean;
+  message: string;
+}
+
+interface FormErrors {
+  title: FieldError;
+  artist: FieldError;
+  genre: FieldError;
+  description: FieldError;
+}
+
+const mapSourceType = (source: SongSource | undefined): SongSource | undefined => source;
 
 const AlbumCustomizationPage = () => {
   const theme = useTheme();
@@ -112,6 +132,14 @@ const AlbumCustomizationPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingSong, setEditingSong] = useState<ExtendedSong | null>(null);
+  const [lastSavedData, setLastSavedData] = useState<string>('');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [formErrors, setFormErrors] = useState<FormErrors>({
+    title: { error: false, message: '' },
+    artist: { error: false, message: '' },
+    genre: { error: false, message: '' },
+    description: { error: false, message: '' },
+  });
 
   // Load all available songs from different sources
   useEffect(() => {
@@ -176,6 +204,98 @@ const AlbumCustomizationPage = () => {
     loadAllSongs();
   }, [currentUser, trips]);
 
+  // Load draft from localStorage on mount
+  useEffect(() => {
+    if (!albumId) {
+      const savedDraft = localStorage.getItem('albumDraft');
+      if (savedDraft) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          setAlbumData(draft.albumData);
+          setSelectedSongs(draft.selectedSongs);
+        } catch (err) {
+          console.error('Error loading draft:', err);
+        }
+      }
+    }
+  }, [albumId]);
+
+  // Debounced save function
+  const saveToLocalStorage = useCallback(
+    debounce((data: { albumData: typeof albumData; selectedSongs: typeof selectedSongs }) => {
+      try {
+        localStorage.setItem('albumDraft', JSON.stringify(data));
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('Error saving draft:', err);
+        setSaveStatus('error');
+      }
+    }, 1000),
+    []
+  );
+
+  // Autosave when data changes
+  useEffect(() => {
+    if (!albumId) {  // Only autosave for new albums
+      const currentData = JSON.stringify({ albumData, selectedSongs });
+      if (currentData !== lastSavedData) {
+        setSaveStatus('saving');
+        saveToLocalStorage({ albumData, selectedSongs });
+        setLastSavedData(currentData);
+      }
+    }
+  }, [albumData, selectedSongs, albumId, lastSavedData, saveToLocalStorage]);
+
+  // Add this effect to load existing album data when editing
+  useEffect(() => {
+    const loadAlbumData = async () => {
+      if (!albumId || !currentUser) return;
+      
+      try {
+        setIsLoading(true);
+        setError(null);
+        const albumData = await getAlbum(albumId);
+        
+        if (!albumData) {
+          setError('Album not found');
+          return;
+        }
+        
+        if (albumData.userId !== currentUser.uid) {
+          setError('You do not have permission to edit this album');
+          return;
+        }
+        
+        // Set the album data
+        setAlbumData({
+          title: albumData.title,
+          artist: albumData.artist,
+          releaseDate: albumData.releaseDate,
+          genre: albumData.genre,
+          description: albumData.description,
+          coverImage: albumData.coverImage,
+          selectedPlatforms: albumData.selectedPlatforms || [],
+        });
+        
+        // Set the selected songs
+        setSelectedSongs(albumData.songs.map(song => ({
+          ...song,
+          duration: typeof song.duration === 'number' ? 
+            formatDuration(song.duration) : 
+            song.duration
+        })));
+        
+      } catch (error) {
+        console.error('Error loading album:', error);
+        setError('Failed to load album data. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAlbumData();
+  }, [albumId, currentUser]);
+
   const handlePlatformToggle = (platformId: string) => {
     setAlbumData(prev => ({
       ...prev,
@@ -212,8 +332,16 @@ const AlbumCustomizationPage = () => {
   };
 
   const handleAddSelectedSongs = () => {
-    const newSongs = availableSongs.filter(song => selectedSongIds.has(song.id));
-    setSelectedSongs(prev => [...prev, ...newSongs]);
+    const songsToAdd = availableSongs
+      .filter(song => selectedSongIds.has(song.id))
+      .map(song => ({
+        ...song,
+        duration: typeof song.duration === 'string' ? 
+          parseInt(song.duration.split(':')[0]) * 60 + parseInt(song.duration.split(':')[1]) : 
+          song.duration
+      }));
+    
+    setSelectedSongs(prev => [...prev, ...songsToAdd]);
     setSelectedSongIds(new Set());
     setShowSongSelector(false);
   };
@@ -250,61 +378,93 @@ const AlbumCustomizationPage = () => {
     }
   };
 
+  const validateField = (field: keyof FormErrors, value: string) => {
+    switch (field) {
+      case 'title':
+        if (!value.trim()) {
+          return { error: true, message: 'Title is required' };
+        }
+        if (value.length > TITLE_MAX_LENGTH) {
+          return { error: true, message: `Title must be ${TITLE_MAX_LENGTH} characters or less` };
+        }
+        break;
+      case 'artist':
+        if (!value.trim()) {
+          return { error: true, message: 'Artist name is required' };
+        }
+        break;
+      case 'genre':
+        if (value.length > GENRE_MAX_LENGTH) {
+          return { error: true, message: `Genre must be ${GENRE_MAX_LENGTH} characters or less` };
+        }
+        break;
+      case 'description':
+        if (value.length > DESCRIPTION_MAX_LENGTH) {
+          return { error: true, message: `Description must be ${DESCRIPTION_MAX_LENGTH} characters or less` };
+        }
+        break;
+    }
+    return { error: false, message: '' };
+  };
+
+  const handleFieldChange = (field: keyof typeof albumData, value: string) => {
+    const validation = validateField(field as keyof FormErrors, value);
+    setFormErrors(prev => ({
+      ...prev,
+      [field]: validation
+    }));
+
+    setAlbumData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const isFormValid = () => {
+    const validations = {
+      title: validateField('title', albumData.title),
+      artist: validateField('artist', albumData.artist),
+      genre: validateField('genre', albumData.genre),
+      description: validateField('description', albumData.description),
+    };
+
+    setFormErrors(validations);
+    return !Object.values(validations).some(v => v.error);
+  };
+
   const handleSaveAlbum = async () => {
+    if (!isFormValid()) {
+      setError('Please fix the form errors before saving');
+      return;
+    }
+
     if (!currentUser) return;
 
     try {
       setIsLoading(true);
       setError(null);
 
-      const mapSource = (source: SongSource | undefined): 'local' | 'project' | 'firebase' => {
-        switch (source) {
-          case 'local':
-            return 'local';
-          case 'remote':
-            return 'local';
-          case 'upload':
-            return 'local';
-          default:
-            return 'local';
-        }
-      };
-
-      // Clean up the album data by removing undefined values
       const cleanAlbumData = {
         userId: currentUser.uid,
-        title: albumData.title || '',
-        artist: albumData.artist || '',
-        releaseDate: albumData.releaseDate || '',
-        genre: albumData.genre || '',
-        description: albumData.description || '',
-        coverImage: albumData.coverImage || null,
-        selectedPlatforms: albumData.selectedPlatforms || [],
-        songs: selectedSongs.map(song => {
-          // Create a clean metadata object without undefined values
-          const cleanMetadata: Record<string, any> = {
-            source: mapSource(song.metadata?.source)
-          };
-
-          // Only add metadata fields if they have values
-          if (song.metadata?.projectName) cleanMetadata.projectName = song.metadata.projectName;
-          if (song.metadata?.bpm) cleanMetadata.bpm = song.metadata.bpm;
-          if (song.metadata?.key) cleanMetadata.key = song.metadata.key;
-          if (song.metadata?.genre) cleanMetadata.genre = song.metadata.genre;
-          if (song.metadata?.tags) cleanMetadata.tags = song.metadata.tags;
-          if (song.metadata?.releaseDate) cleanMetadata.releaseDate = song.metadata.releaseDate;
-          if (song.metadata?.featuring) cleanMetadata.featuring = song.metadata.featuring;
-          if (song.metadata?.lyrics) cleanMetadata.lyrics = song.metadata.lyrics;
-          if (song.metadata?.videoUrl) cleanMetadata.videoUrl = song.metadata.videoUrl;
-
-          return {
-            id: song.id,
-            title: song.title || '',
-            artist: song.artist || '',
-            duration: song.duration || 0,
-            metadata: cleanMetadata
-          };
-        })
+        title: albumData.title,
+        artist: albumData.artist,
+        releaseDate: albumData.releaseDate,
+        genre: albumData.genre,
+        description: albumData.description,
+        coverImage: albumData.coverImage,
+        selectedPlatforms: albumData.selectedPlatforms,
+        songs: selectedSongs.map(song => ({
+          id: song.id,
+          title: song.title,
+          artist: song.artist,
+          duration: typeof song.duration === 'string' ? 
+            parseInt(song.duration.split(':')[0]) * 60 + parseInt(song.duration.split(':')[1]) : 
+            Number(song.duration),
+          metadata: {
+            ...song.metadata,
+            source: mapSourceType(song.metadata?.source)
+          }
+        })) as AlbumSong[]
       };
 
       if (albumId) {
@@ -314,14 +474,24 @@ const AlbumCustomizationPage = () => {
         navigate(`/albums/${newAlbum.id}`);
       }
 
-      // Show success message or redirect
+      if (!albumId) {
+        localStorage.removeItem('albumDraft');
+      }
+
       navigate('/albums');
-    } catch (error) {
-      console.error('Error saving album:', error);
+    } catch (err) {
+      console.error('Error saving album:', err);
       setError('Failed to save album. Please try again.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const filterSongsByTab = (song: ExtendedSong) => {
+    if (activeTab === 0) return true;
+    if (activeTab === 1) return song.metadata?.source === 'local';
+    if (activeTab === 2) return song.metadata?.source === 'firebase';
+    return true;
   };
 
   return (
@@ -331,270 +501,372 @@ const AlbumCustomizationPage = () => {
           <AlbumIcon />
         </IconButton>
         <Typography variant="h4" fontWeight="bold">
-          Album Customization
+          {albumId ? 'Edit Album' : 'Create Album'}
         </Typography>
       </Box>
 
-      {/* Songs Selection Section */}
-      <Paper elevation={0} sx={{ p: 3, borderRadius: 2, mb: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">
-            Songs ({selectedSongs.length})
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setShowSongSelector(true)}
-          >
-            Add Songs
-          </Button>
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+          <CircularProgress />
         </Box>
+      ) : error ? (
+        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
+      ) : (
+        <>
+          {/* Songs Selection Section */}
+          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6">
+                Songs ({selectedSongs.length})
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setShowSongSelector(true)}
+              >
+                Add Songs
+              </Button>
+            </Box>
 
-        <DragDropContext onDragEnd={handleDragEnd}>
-          <Droppable droppableId="songs">
-            {(provided) => (
-              <List {...provided.droppableProps} ref={provided.innerRef}>
-                {selectedSongs.map((song, index) => (
-                  <Draggable key={song.id} draggableId={song.id} index={index}>
-                    {(provided) => (
-                      <ListItem
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        sx={{
-                          bgcolor: 'background.paper',
-                          mb: 1,
-                          borderRadius: 1,
-                          border: '1px solid',
-                          borderColor: 'divider',
-                        }}
-                      >
-                        <ListItemIcon {...provided.dragHandleProps}>
-                          <DragIndicatorIcon />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={song.title}
-                          secondary={
-                            <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography component="span" variant="body2" color="text.secondary">
-                                {song.artist}
-                              </Typography>
-                              {song.metadata?.projectName && (
-                                <Chip
-                                  label={song.metadata.projectName}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                />
-                              )}
-                              {song.metadata?.tags && song.metadata.tags.length > 0 && (
-                                <Chip
-                                  label={song.metadata.tags[0]}
-                                  size="small"
-                                  color="secondary"
-                                  variant="outlined"
-                                />
-                              )}
-                            </Box>
-                          }
-                        />
-                        <ListItemSecondaryAction>
-                          <IconButton
-                            edge="end"
-                            onClick={() => handleEditSong(song)}
-                            sx={{ mr: 1 }}
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="songs">
+                {(provided) => (
+                  <List {...provided.droppableProps} ref={provided.innerRef}>
+                    {selectedSongs.map((song, index) => (
+                      <Draggable key={song.id} draggableId={song.id} index={index}>
+                        {(provided) => (
+                          <ListItem
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            sx={{
+                              bgcolor: 'background.paper',
+                              mb: 1,
+                              borderRadius: 1,
+                              border: '1px solid',
+                              borderColor: 'divider',
+                            }}
                           >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            edge="end"
-                            onClick={() => handleRemoveSong(song.id)}
-                            sx={{ color: 'error.main' }}
-                          >
-                            <RemoveIcon />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </List>
+                            <ListItemIcon {...provided.dragHandleProps}>
+                              <DragIndicatorIcon />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={song.title}
+                              secondary={
+                                <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography component="span" variant="body2" color="text.secondary">
+                                    {song.artist}
+                                  </Typography>
+                                  {song.metadata?.projectName && (
+                                    <Chip
+                                      label={song.metadata.projectName}
+                                      size="small"
+                                      color="primary"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                  {song.metadata?.tags && song.metadata.tags.length > 0 && (
+                                    <Chip
+                                      label={song.metadata.tags[0]}
+                                      size="small"
+                                      color="secondary"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                </Box>
+                              }
+                            />
+                            <ListItemSecondaryAction>
+                              <IconButton
+                                edge="end"
+                                onClick={() => handleEditSong(song)}
+                                sx={{ mr: 1 }}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                              <IconButton
+                                edge="end"
+                                onClick={() => handleRemoveSong(song.id)}
+                                sx={{ color: 'error.main' }}
+                              >
+                                <RemoveIcon />
+                              </IconButton>
+                            </ListItemSecondaryAction>
+                          </ListItem>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </List>
+                )}
+              </Droppable>
+            </DragDropContext>
+
+            {selectedSongs.length === 0 && (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <MusicNoteIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+                <Typography variant="body1" color="text.secondary">
+                  No songs added yet. Click "Add Songs" to start building your album.
+                </Typography>
+              </Box>
             )}
-          </Droppable>
-        </DragDropContext>
+          </Paper>
 
-        {selectedSongs.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <MusicNoteIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="body1" color="text.secondary">
-              No songs added yet. Click "Add Songs" to start building your album.
-            </Typography>
-          </Box>
-        )}
-      </Paper>
-
-      {/* Album Details Section */}
-      <Grid container spacing={4}>
-        <Grid item xs={12} md={8}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Album Details
-            </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12}>
+          {/* Album Details Section */}
+          <Grid container spacing={4}>
+            <Grid item xs={12} md={8}>
+              <Paper elevation={0} sx={{ p: 3, borderRadius: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Album Details
+                </Typography>
                 <TextField
                   fullWidth
                   label="Album Title"
                   value={albumData.title}
-                  onChange={(e) => setAlbumData(prev => ({ ...prev, title: e.target.value }))}
+                  onChange={(e) => handleFieldChange('title', e.target.value)}
+                  error={formErrors.title.error}
+                  helperText={
+                    formErrors.title.error ? formErrors.title.message :
+                    `${albumData.title.length}/${TITLE_MAX_LENGTH} characters`
+                  }
+                  margin="normal"
+                  required
+                  InputProps={{
+                    endAdornment: albumData.title.length > 0 && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => handleFieldChange('title', '')}
+                          edge="end"
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
                 />
-              </Grid>
-              <Grid item xs={12} sm={6}>
+
                 <TextField
                   fullWidth
                   label="Artist Name"
                   value={albumData.artist}
-                  onChange={(e) => setAlbumData(prev => ({ ...prev, artist: e.target.value }))}
+                  onChange={(e) => handleFieldChange('artist', e.target.value)}
+                  error={formErrors.artist.error}
+                  helperText={formErrors.artist.error && formErrors.artist.message}
+                  margin="normal"
+                  required
+                  InputProps={{
+                    endAdornment: albumData.artist.length > 0 && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => handleFieldChange('artist', '')}
+                          edge="end"
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
                 />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  type="date"
-                  label="Release Date"
-                  InputLabelProps={{ shrink: true }}
-                  value={albumData.releaseDate}
-                  onChange={(e) => setAlbumData(prev => ({ ...prev, releaseDate: e.target.value }))}
-                />
-              </Grid>
-              <Grid item xs={12}>
+
                 <TextField
                   fullWidth
                   label="Genre"
                   value={albumData.genre}
-                  onChange={(e) => setAlbumData(prev => ({ ...prev, genre: e.target.value }))}
+                  onChange={(e) => handleFieldChange('genre', e.target.value)}
+                  error={formErrors.genre.error}
+                  helperText={
+                    formErrors.genre.error ? formErrors.genre.message :
+                    `${albumData.genre.length}/${GENRE_MAX_LENGTH} characters`
+                  }
+                  margin="normal"
+                  InputProps={{
+                    endAdornment: albumData.genre.length > 0 && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => handleFieldChange('genre', '')}
+                          edge="end"
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
                 />
-              </Grid>
-              <Grid item xs={12}>
+
                 <TextField
                   fullWidth
+                  label="Release Date"
+                  type="date"
+                  value={albumData.releaseDate}
+                  onChange={(e) => handleFieldChange('releaseDate', e.target.value)}
+                  margin="normal"
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+
+                <TextField
+                  fullWidth
+                  label="Description"
+                  value={albumData.description}
+                  onChange={(e) => handleFieldChange('description', e.target.value)}
+                  error={formErrors.description.error}
+                  helperText={
+                    formErrors.description.error ? formErrors.description.message :
+                    `${albumData.description.length}/${DESCRIPTION_MAX_LENGTH} characters`
+                  }
+                  margin="normal"
                   multiline
                   rows={4}
-                  label="Album Description"
-                  value={albumData.description}
-                  onChange={(e) => setAlbumData(prev => ({ ...prev, description: e.target.value }))}
-                />
-              </Grid>
-            </Grid>
-          </Paper>
-
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2, mt: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Target Platforms
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {platforms.map((platform) => (
-                <Chip
-                  key={platform.id}
-                  label={platform.name}
-                  onClick={() => handlePlatformToggle(platform.id)}
-                  sx={{
-                    bgcolor: albumData.selectedPlatforms.includes(platform.id)
-                      ? alpha(platform.color, 0.1)
-                      : 'transparent',
-                    border: '1px solid',
-                    borderColor: albumData.selectedPlatforms.includes(platform.id)
-                      ? platform.color
-                      : 'divider',
-                    color: albumData.selectedPlatforms.includes(platform.id)
-                      ? platform.color
-                      : 'text.primary',
-                    '&:hover': {
-                      bgcolor: alpha(platform.color, 0.2),
-                    },
+                  InputProps={{
+                    endAdornment: albumData.description.length > 0 && (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => handleFieldChange('description', '')}
+                          edge="end"
+                        >
+                          <ClearIcon />
+                        </IconButton>
+                      </InputAdornment>
+                    ),
                   }}
                 />
-              ))}
-            </Box>
-          </Paper>
-        </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Paper elevation={0} sx={{ p: 3, borderRadius: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Cover Image
-            </Typography>
-            <Box
-              sx={{
-                width: '100%',
-                aspectRatio: '1',
-                borderRadius: 2,
-                overflow: 'hidden',
-                bgcolor: 'background.default',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px dashed',
-                borderColor: 'divider',
-                mb: 2,
-                position: 'relative',
-              }}
-            >
-              {albumData.coverImage ? (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Release Platforms
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {platforms.map((platform) => (
+                      <Chip
+                        key={platform.id}
+                        label={platform.name}
+                        onClick={() => handlePlatformToggle(platform.id)}
+                        color={albumData.selectedPlatforms.includes(platform.id) ? 'primary' : 'default'}
+                        sx={{
+                          bgcolor: albumData.selectedPlatforms.includes(platform.id) 
+                            ? alpha(platform.color, 0.1)
+                            : 'transparent',
+                          '&:hover': {
+                            bgcolor: albumData.selectedPlatforms.includes(platform.id)
+                              ? alpha(platform.color, 0.2)
+                              : alpha(platform.color, 0.05),
+                          },
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              </Paper>
+
+              <Paper elevation={0} sx={{ p: 3, borderRadius: 2, mt: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Target Platforms
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {platforms.map((platform) => (
+                    <Chip
+                      key={platform.id}
+                      label={platform.name}
+                      onClick={() => handlePlatformToggle(platform.id)}
+                      sx={{
+                        bgcolor: albumData.selectedPlatforms.includes(platform.id)
+                          ? alpha(platform.color, 0.1)
+                          : 'transparent',
+                        border: '1px solid',
+                        borderColor: albumData.selectedPlatforms.includes(platform.id)
+                          ? platform.color
+                          : 'divider',
+                        color: albumData.selectedPlatforms.includes(platform.id)
+                          ? platform.color
+                          : 'text.primary',
+                        '&:hover': {
+                          bgcolor: alpha(platform.color, 0.2),
+                        },
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Paper>
+            </Grid>
+
+            <Grid item xs={12} md={4}>
+              <Paper elevation={0} sx={{ p: 3, borderRadius: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Cover Image
+                </Typography>
                 <Box
-                  component="img"
-                  src={albumData.coverImage}
                   sx={{
                     width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
+                    aspectRatio: '1',
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    bgcolor: 'background.default',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px dashed',
+                    borderColor: 'divider',
+                    mb: 2,
+                    position: 'relative',
                   }}
-                />
-              ) : (
-                <AlbumIcon sx={{ fontSize: 80, color: 'text.secondary' }} />
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  opacity: 0,
-                  cursor: 'pointer',
-                }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" align="center">
-              Click or drag to upload cover image
-            </Typography>
-          </Paper>
+                >
+                  {albumData.coverImage ? (
+                    <Box
+                      component="img"
+                      src={albumData.coverImage}
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  ) : (
+                    <AlbumIcon sx={{ fontSize: 80, color: 'text.secondary' }} />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: 'pointer',
+                    }}
+                  />
+                </Box>
+                <Typography variant="body2" color="text.secondary" align="center">
+                  Click or drag to upload cover image
+                </Typography>
+              </Paper>
 
-          <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-            <Button
-              fullWidth
-              variant="outlined"
-              startIcon={<PreviewIcon />}
-              onClick={() => {/* TODO: Implement preview */}}
-            >
-              Preview
-            </Button>
-            <Button
-              fullWidth
-              variant="contained"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveAlbum}
-              disabled={isLoading}
-            >
-              {isLoading ? 'Saving...' : 'Save'}
-            </Button>
-          </Box>
-        </Grid>
-      </Grid>
+              <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<PreviewIcon />}
+                  onClick={() => {/* TODO: Implement preview */}}
+                >
+                  Preview
+                </Button>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={<SaveIcon />}
+                  onClick={handleSaveAlbum}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Saving...' : 'Save'}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </>
+      )}
 
       {/* Song Selector Dialog */}
       <Dialog
@@ -605,84 +877,54 @@ const AlbumCustomizationPage = () => {
       >
         <DialogTitle>Select Songs</DialogTitle>
         <DialogContent>
-          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-            <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-              <Tab icon={<StorageIcon />} label="All Songs" />
-              <Tab icon={<FolderIcon />} label="Projects" />
-              <Tab icon={<CloudIcon />} label="Cloud" />
-              <Tab icon={<MusicNoteIcon />} label="Local" />
-            </Tabs>
-          </Box>
+          <Tabs
+            value={activeTab}
+            onChange={(_, newValue) => setActiveTab(newValue)}
+            sx={{ mb: 2 }}
+          >
+            <Tab label="All Songs" />
+            <Tab label="Local Files" />
+            <Tab label="Cloud Files" />
+          </Tabs>
 
-          {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress />
-            </Box>
-          ) : error ? (
-            <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-          ) : (
-            <List>
-              {availableSongs
-                .filter(song => {
-                  if (activeTab === 0) return true;
-                  if (activeTab === 1) return song.metadata?.projectName !== undefined;
-                  if (activeTab === 2) return song.metadata?.source === 'remote';
-                  if (activeTab === 3) return song.metadata?.source === 'local';
-                  return true;
-                })
-                .map((song) => (
-                  <ListItem key={song.id}>
-                    <ListItemIcon>
-                      <Checkbox
-                        edge="start"
-                        checked={selectedSongIds.has(song.id)}
-                        onChange={() => handleSongSelect(song)}
-                      />
-                    </ListItemIcon>
-                    <ListItemIcon>
-                      {song.metadata?.source === 'local' && <StorageIcon />}
-                      {song.metadata?.projectName && <FolderIcon />}
-                      {song.metadata?.source === 'remote' && <CloudIcon />}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={song.title}
-                      secondary={
-                        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography component="span" variant="body2" color="text.secondary">
-                            {song.artist}
-                          </Typography>
-                          {song.metadata?.projectName && (
-                            <Chip
-                              label={song.metadata.projectName}
-                              size="small"
-                              color="primary"
-                              variant="outlined"
-                            />
-                          )}
-                          {song.metadata?.tags && song.metadata.tags.length > 0 && (
-                            <Chip
-                              label={song.metadata.tags[0]}
-                              size="small"
-                              color="secondary"
-                              variant="outlined"
-                            />
-                          )}
-                        </Box>
-                      }
+          <List>
+            {availableSongs
+              .filter(filterSongsByTab)
+              .map((song) => (
+                <ListItem key={song.id}>
+                  <ListItemIcon>
+                    <Checkbox
+                      edge="start"
+                      checked={selectedSongIds.has(song.id)}
+                      onChange={() => handleSongSelect(song)}
                     />
-                  </ListItem>
-                ))}
-            </List>
-          )}
+                  </ListItemIcon>
+                  <ListItemIcon>
+                    {song.metadata?.source === 'local' && <FolderIcon />}
+                    {song.metadata?.source === 'firebase' && <CloudIcon />}
+                    {!song.metadata?.source && <MusicNoteIcon />}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={song.title}
+                    secondary={song.artist}
+                  />
+                  <ListItemSecondaryAction>
+                    <Typography variant="body2" color="text.secondary">
+                      {typeof song.duration === 'string' ? song.duration : formatDuration(song.duration)}
+                    </Typography>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+          </List>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowSongSelector(false)}>Cancel</Button>
           <Button
-            variant="contained"
             onClick={handleAddSelectedSongs}
+            color="primary"
             disabled={selectedSongIds.size === 0}
           >
-            Add Selected ({selectedSongIds.size})
+            Add {selectedSongIds.size} Song{selectedSongIds.size !== 1 ? 's' : ''}
           </Button>
         </DialogActions>
       </Dialog>
