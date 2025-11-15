@@ -109,6 +109,8 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [songForMixer, setSongForMixer] = useState<Song | null>(null); // Store song for mixer panel
   const [assetIdForComments, setAssetIdForComments] = useState<string | null>(null); // Store assetId for comments
+  const [releaseForExport, setReleaseForExport] = useState<any | null>(null); // Store release for export panel
+  const [loadingRelease, setLoadingRelease] = useState(false);
   const [deletingSongId, setDeletingSongId] = useState<string | null>(null);
   const [newSongTitle, setNewSongTitle] = useState('');
   const [newSongArtist, setNewSongArtist] = useState('');
@@ -422,6 +424,41 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       cancelled = true;
     };
   }, [selectedTrip, currentUser, songs]);
+
+  // Fetch release data when release-export panel is opened
+  useEffect(() => {
+    const fetchReleaseForExport = async () => {
+      if (activePanel === 'release-export' && selectedTrip && !releaseForExport && !loadingRelease) {
+        setLoadingRelease(true);
+        try {
+          const { getReleasesForProject } = await import('../services/firebaseService');
+          const releases = await getReleasesForProject(selectedTrip);
+          if (releases.length > 0) {
+            setReleaseForExport(releases[0]); // Use first release for now
+          } else {
+            setError('No release found for this project. Please create a release first.');
+            setActivePanel(null);
+          }
+        } catch (error) {
+          setError('Failed to load release data');
+          console.error('Error loading release:', error);
+          setActivePanel(null);
+        } finally {
+          setLoadingRelease(false);
+        }
+      }
+    };
+
+    fetchReleaseForExport();
+  }, [activePanel, selectedTrip, releaseForExport, loadingRelease]);
+
+  // Clear release data when panel closes
+  useEffect(() => {
+    if (activePanel !== 'release-export') {
+      setReleaseForExport(null);
+      setLoadingRelease(false);
+    }
+  }, [activePanel]);
 
   const validateFile = (file: File) => {
     return validateAudioFile(file, FILE_SIZE_LIMITS.AUDIO_UPLOAD);
@@ -1030,6 +1067,8 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
     
     if (activePanel === 'release-planning') {
       additionalProps.collaborators = getCollaboratorsList();
+      additionalProps.setActivePanel = setActivePanel;
+      additionalProps.songs = songs;
       additionalProps.onCreateRelease = async (release: any) => {
         // Handle release creation
         try {
@@ -1041,8 +1080,22 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
           setSuccess('Release created successfully');
         } catch (error) {
           setError('Failed to create release');
+          console.error('Error creating release:', error);
         }
       };
+    }
+
+    if (activePanel === 'release-export') {
+      // Release data is fetched in useEffect, use state variable
+      if (releaseForExport) {
+        additionalProps.release = releaseForExport;
+        additionalProps.songs = songs;
+        additionalProps.collaborators = getCollaboratorsList();
+        additionalProps.onExportComplete = () => {
+          setSuccess('Release exported successfully');
+          // Optionally refresh data
+        };
+      }
     }
 
     if (activePanel === 'gdrive-import') {

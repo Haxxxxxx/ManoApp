@@ -29,6 +29,8 @@ interface ReleasePlanningPanelProps {
   onCreateRelease?: (release: Omit<Release, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   existingRelease?: Release;
   collaborators?: Array<{ id: string; name: string }>;
+  setActivePanel?: (panel: string) => void;
+  songs?: Song[];
 }
 
 const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
@@ -37,6 +39,8 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
   onCreateRelease,
   existingRelease,
   collaborators = [],
+  setActivePanel,
+  songs = [],
 }) => {
   const theme = useTheme();
   const { showSuccess, showError, ToastComponent } = useToast();
@@ -196,13 +200,17 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
         <Button onClick={handleSave} variant="contained">
           Save Release
         </Button>
-        {isFeatureEnabled('soundcloud') && existingRelease && (
+        {isFeatureEnabled('soundcloud') && existingRelease && setActivePanel && (
           <Button
             variant="contained"
             color="secondary"
             onClick={() => {
-              // Export will be handled by parent component
-              // This button can trigger export flow
+              try {
+                setActivePanel('release-export');
+              } catch (error) {
+                showError('Failed to open export panel');
+                console.error('Error opening export panel:', error);
+              }
             }}
           >
             Export Release

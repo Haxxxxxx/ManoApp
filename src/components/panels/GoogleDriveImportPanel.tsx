@@ -80,6 +80,9 @@ const GoogleDriveImportPanel: React.FC<GoogleDriveImportPanelProps> = ({
       }
     } catch (error) {
       setConnected(false);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to check Google Drive connection: ${errorMessage}`);
+      console.error('Error checking Google Drive connection:', error);
     } finally {
       setCheckingConnection(false);
     }
@@ -96,7 +99,9 @@ const GoogleDriveImportPanel: React.FC<GoogleDriveImportPanelProps> = ({
       // Redirect to OAuth URL (better UX than popup for OAuth)
       window.location.href = authUrl;
     } catch (error) {
-      showError('Failed to start OAuth flow');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to start OAuth flow: ${errorMessage}`);
+      console.error('Error starting Google Drive OAuth:', error);
     }
   };
 
@@ -107,7 +112,10 @@ const GoogleDriveImportPanel: React.FC<GoogleDriveImportPanelProps> = ({
       showSuccess('Successfully connected to Google Drive');
       await checkConnection();
     } catch (error) {
-      showError('Failed to complete OAuth flow');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to complete OAuth flow: ${errorMessage}`);
+      console.error('Error completing Google Drive OAuth:', error);
+      sessionStorage.removeItem('gdrive_oauth_state');
     }
   };
 
@@ -137,7 +145,10 @@ const GoogleDriveImportPanel: React.FC<GoogleDriveImportPanelProps> = ({
       setFiles(pageToken ? [...files, ...result.files] : result.files);
       setNextPageToken(result.nextPageToken);
     } catch (error) {
-      showError('Failed to load files from Google Drive');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to load files from Google Drive: ${errorMessage}`);
+      console.error('Error loading Google Drive files:', error);
+      // Don't clear files on error, keep existing files visible
     } finally {
       setLoading(false);
     }
@@ -152,13 +163,15 @@ const GoogleDriveImportPanel: React.FC<GoogleDriveImportPanelProps> = ({
       });
 
       if (result.duplicate) {
-        showError('File already imported');
+        showError(`File "${file.name}" has already been imported`);
       } else {
         showSuccess(`Successfully imported ${file.name}`);
         onFileImported?.(result.assetId);
       }
     } catch (error) {
-      showError(`Failed to import ${file.name}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to import "${file.name}": ${errorMessage}`);
+      console.error('Error importing file:', error);
     } finally {
       setImporting(null);
     }

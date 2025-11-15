@@ -28,8 +28,10 @@ import MixerPanel from './MixerPanel';
 import CommentsPanel from './CommentsPanel';
 import ReleasePlanningPanel from './ReleasePlanningPanel';
 import GoogleDriveImportPanel from './GoogleDriveImportPanel';
+import ReleaseExportPanel from './ReleaseExportPanel';
 import type { Trip } from '../../types/trip';
 import type { Song } from '../../types/song';
+import type { Release } from '../../types/release';
 
 // Define panel registry type
 export interface PanelProps {
@@ -52,8 +54,12 @@ export interface PanelProps {
   collaborators?: Array<{ id: string; name: string; email?: string; avatar?: string }>;
   song?: Song;
   onCreateRelease?: (release: any) => Promise<void>;
-  existingRelease?: any;
+  existingRelease?: Release;
+  release?: Release;
   onExportMixdown?: (blob: Blob, filename: string) => void;
+  onFileImported?: (assetId: string) => void;
+  onExportComplete?: () => void;
+  setActivePanel?: (panel: string) => void;
   [key: string]: any; // Allow additional props for flexibility
 }
 
@@ -169,6 +175,12 @@ export const panelRegistry: PanelRegistry = {
     title: 'Import from Google Drive',
     icon: <CloudUploadIcon />,
     requiresTrip: false
+  },
+  'release-export': {
+    component: ReleaseExportPanel,
+    title: 'Export Release',
+    icon: <CloudUploadIcon />,
+    requiresTrip: true
   }
 };
 
@@ -231,6 +243,11 @@ export const getPanelProps = (
       }
 
       if (panelType === 'gdrive-import') {
+        panelProps.projectId = selectedTrip || '';
+      }
+
+      if (panelType === 'release-export') {
+        // Release and songs will be passed via additionalProps from MainContent
         panelProps.projectId = selectedTrip || '';
       }
 

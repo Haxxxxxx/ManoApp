@@ -16,7 +16,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { Comment } from '../../types/comment';
-import { CommentThread } from '../common/CommentThread';
+import CommentThread from '../common/CommentThread';
 import CommentComposer from '../common/CommentComposer';
 import {
   getCommentsForProject,

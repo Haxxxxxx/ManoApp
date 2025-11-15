@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, Alert } from '@mui/material';
+import { Box, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import ExportPanel from '../ExportPanel';
 import { ReleaseManifest, PreflightResult, SubmissionResult } from '../../types/export';
 import { Release } from '../../types/release';
@@ -65,21 +65,41 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
 
   const handleRunPreflight = async (manifest: ReleaseManifest): Promise<PreflightResult> => {
     if (!isFeatureEnabled('soundcloud')) {
-      return { valid: false, errors: [{ code: 'FEATURE_DISABLED', message: 'SoundCloud export is not enabled', severity: 'error' }], warnings: [] };
+      const errorResult = { 
+        valid: false, 
+        errors: [{ code: 'FEATURE_DISABLED', message: 'SoundCloud export is not enabled', severity: 'error' as const }], 
+        warnings: [] 
+      };
+      setPreflightResult(errorResult);
+      showError('SoundCloud export is not enabled');
+      return errorResult;
     }
 
     try {
       const connector = new SoundCloudConnector();
       const result = await connector.runPreflight(manifest);
       setPreflightResult(result);
+      
+      if (!result.valid) {
+        const errorMessages = result.errors.map(e => e.message).join(', ');
+        showError(`Preflight validation failed: ${errorMessages}`);
+      } else if (result.warnings.length > 0) {
+        const warningMessages = result.warnings.map(w => w.message).join(', ');
+        showError(`Preflight warnings: ${warningMessages}`);
+      }
+      
       return result;
     } catch (error) {
-      showError('Failed to run preflight validation');
-      return {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to run preflight validation: ${errorMessage}`);
+      console.error('Preflight validation error:', error);
+      const errorResult = {
         valid: false,
-        errors: [{ code: 'PREFLIGHT_ERROR', message: error instanceof Error ? error.message : 'Unknown error', severity: 'error' }],
+        errors: [{ code: 'PREFLIGHT_ERROR', message: errorMessage, severity: 'error' as const }],
         warnings: [],
       };
+      setPreflightResult(errorResult);
+      return errorResult;
     }
   };
 
@@ -88,7 +108,15 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
     providerIds: string[]
   ): Promise<SubmissionResult[]> => {
     if (!isFeatureEnabled('soundcloud')) {
-      throw new Error('SoundCloud export is not enabled');
+      const error = new Error('SoundCloud export is not enabled');
+      showError(error.message);
+      throw error;
+    }
+
+    if (!providerIds || providerIds.length === 0) {
+      const error = new Error('No export providers selected');
+      showError(error.message);
+      throw error;
     }
 
     const results: SubmissionResult[] = [];
@@ -97,7 +125,11 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
       try {
         if (providerId === 'soundcloud') {
           const connector = new SoundCloudConnector();
+          
+          // Prepare payload
           const payload = await connector.prepare(manifest);
+          
+          // Submit to provider
           const result = await connector.submit(payload);
           results.push(result);
 
@@ -113,14 +145,24 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
             },
           ]);
 
-          showSuccess(`Successfully exported to ${providerId}`);
+          if (result.status === 'completed') {
+            showSuccess(`Successfully exported to ${providerId}`);
+          } else if (result.status === 'failed') {
+            showError(`Export to ${providerId} failed: ${result.error || 'Unknown error'}`);
+          } else {
+            showError(`Export to ${providerId} is pending`);
+          }
+        } else {
+          throw new Error(`Unsupported provider: ${providerId}`);
         }
       } catch (error) {
-        showError(`Failed to export to ${providerId}`);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        showError(`Failed to export to ${providerId}: ${errorMessage}`);
+        console.error(`Error exporting to ${providerId}:`, error);
         results.push({
-          submissionId: `error-${Date.now()}`,
+          submissionId: `error-${Date.now()}-${providerId}`,
           status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
           submittedAt: new Date().toISOString(),
         });
       }
@@ -146,10 +188,26 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
     );
   }
 
+  if (!release) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Release not found. Please create a release before exporting.
+        </Alert>
+        <Button onClick={onClose} variant="outlined">
+          Close
+        </Button>
+      </Box>
+    );
+  }
+
   if (!manifest) {
     return (
       <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography>Loading release data...</Typography>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Loading release data...
+        </Alert>
+        <CircularProgress sx={{ mt: 2 }} />
       </Box>
     );
   }

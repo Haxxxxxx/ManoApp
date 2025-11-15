@@ -34,7 +34,11 @@ export class SoundCloudConnector extends BaseConnector {
    */
   async authorize(userId: string): Promise<string | { redirectUrl: string }> {
     if (!functions) {
-      throw new Error('Firebase Functions service is not available');
+      throw new Error('Firebase Functions service is not available. Please check your Firebase configuration.');
+    }
+
+    if (!userId) {
+      throw new Error('User ID is required for authorization');
     }
 
     try {
@@ -45,6 +49,10 @@ export class SoundCloudConnector extends BaseConnector {
       );
 
       const result = await checkToken({ userId });
+      
+      if (!result.data) {
+        throw new Error('Invalid response from token check service');
+      }
       
       if (result.data.hasToken) {
         return 'authorized'; // User already authorized
@@ -57,11 +65,15 @@ export class SoundCloudConnector extends BaseConnector {
       );
 
       const oauthResult = await startOAuth({});
+      
+      if (!oauthResult.data?.redirectUrl) {
+        throw new Error('Invalid OAuth redirect URL received');
+      }
+      
       return { redirectUrl: oauthResult.data.redirectUrl };
     } catch (error) {
-      throw new Error(
-        `Failed to authorize SoundCloud: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to authorize SoundCloud: ${errorMessage}`);
     }
   }
 
@@ -125,7 +137,11 @@ export class SoundCloudConnector extends BaseConnector {
    */
   async submit(payload: SubmissionPayload): Promise<SubmissionResult> {
     if (!functions) {
-      throw new Error('Firebase Functions service is not available');
+      throw new Error('Firebase Functions service is not available. Please check your Firebase configuration.');
+    }
+
+    if (!payload || !payload.data) {
+      throw new Error('Invalid submission payload');
     }
 
     try {
@@ -136,24 +152,23 @@ export class SoundCloudConnector extends BaseConnector {
       >(functions as Functions, 'submitToSoundCloud');
 
       const result = await submitToSoundCloud(payload);
+      
+      if (!result.data) {
+        throw new Error('Invalid response from submission service');
+      }
+      
+      if (!result.data.submissionId) {
+        throw new Error('Submission failed: No submission ID returned');
+      }
+      
       return result.data;
     } catch (error) {
-      // Mock implementation: return success for testing
-      // TODO: Replace with real error handling
-      console.warn('SoundCloud submission (mock):', error);
-
-      // Return mock success result
-      return {
-        submissionId: `mock-${Date.now()}`,
-        status: 'completed',
-        providerData: {
-          trackUrl: 'https://soundcloud.com/mock-track',
-          trackId: 'mock-track-id',
-        },
-        providerUrl: 'https://soundcloud.com/mock-track',
-        submittedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-      };
+      // Enhanced error handling
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('SoundCloud submission error:', error);
+      
+      // Return error result instead of mock success
+      throw new Error(`Failed to submit to SoundCloud: ${errorMessage}`);
     }
   }
 
@@ -235,7 +250,11 @@ export class SoundCloudConnector extends BaseConnector {
    */
   async getSubmissionStatus(submissionId: string): Promise<SubmissionResult> {
     if (!functions) {
-      throw new Error('Firebase Functions service is not available');
+      throw new Error('Firebase Functions service is not available. Please check your Firebase configuration.');
+    }
+
+    if (!submissionId) {
+      throw new Error('Submission ID is required');
     }
 
     try {
@@ -245,14 +264,16 @@ export class SoundCloudConnector extends BaseConnector {
       );
 
       const result = await getStatus({ submissionId });
+      
+      if (!result.data) {
+        throw new Error('Invalid response from status service');
+      }
+      
       return result.data;
     } catch (error) {
-      // Mock: return pending status
-      return {
-        submissionId,
-        status: 'pending',
-        submittedAt: new Date().toISOString(),
-      };
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error getting submission status:', error);
+      throw new Error(`Failed to get submission status: ${errorMessage}`);
     }
   }
 }
