@@ -38,7 +38,7 @@ let app;
 try {
   app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 } catch (error) {
-  console.error('Error initializing Firebase app:', error);
+  // Error initializing Firebase app - critical error, app may not function
   throw error;
 }
 
@@ -51,21 +51,21 @@ let functions: Functions | undefined;
 try {
   auth = getAuth(app);
 } catch (error) {
-  console.error('Error initializing Firebase Auth:', error);
+  // Error initializing Firebase Auth - critical error
   throw error;
 }
 
 try {
   db = getFirestore(app);
 } catch (error) {
-  console.error('Error initializing Firebase Firestore:', error);
+  // Error initializing Firebase Firestore - critical error
   throw error;
 }
 
 try {
   storage = getStorage(app);
 } catch (error) {
-  console.error('Error initializing Firebase Storage:', error);
+  // Error initializing Firebase Storage - critical error
   if (env.PROD) {
     throw error;
   }
@@ -74,7 +74,7 @@ try {
 try {
   functions = getFunctions(app);
 } catch (error) {
-  console.error('Error initializing Firebase Functions:', error);
+  // Error initializing Firebase Functions - critical error
   if (env.PROD) {
     throw error;
   }

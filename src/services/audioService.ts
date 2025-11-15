@@ -41,16 +41,11 @@ export const audioService = {
       }
       return filePath;
     } catch (error) {
-      console.error('Error getting authenticated URL:', error);
+      // Error getting authenticated URL
       throw error;
     }
   },
 
-  formatDuration: (duration: number): string => {
-    const minutes = Math.floor(duration / 60);
-    const seconds = Math.floor(duration % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  },
 
   createAudioElement: async (filePath: string): Promise<HTMLAudioElement> => {
     try {
@@ -60,7 +55,7 @@ export const audioService = {
       audio.src = authenticatedUrl;
       return audio;
     } catch (error) {
-      console.error('Error creating audio element:', error);
+      // Error creating audio element
       throw error;
     }
   }

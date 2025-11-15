@@ -9,16 +9,19 @@ import {
   Container,
   CircularProgress
 } from '@mui/material';
-import { useAuth } from '../hooks';
+import { useAuth } from '../contexts/AuthContext';
 
 const AuthForm = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, signup, loading, error } = useAuth();
+  const { login, signup, loading, devBypass } = useAuth();
+  const [error, setError] = useState<Error | null>(null);
+  const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
     try {
       if (isSignUp) {
@@ -27,8 +30,18 @@ const AuthForm = () => {
         await login(email, password);
       }
     } catch (err) {
-      // Error is already handled by the useAuth hook
-      console.error('Auth error:', err);
+      setError(err instanceof Error ? err : new Error('Authentication failed'));
+      // Auth error
+    }
+  };
+
+  const handleDevBypass = async () => {
+    setError(null);
+    try {
+      await devBypass();
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Dev bypass failed'));
+      // Dev bypass error
     }
   };
 
@@ -90,6 +103,9 @@ const AuthForm = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={loading}
+              autoComplete="email"
+              helperText={isSignUp ? "We'll never share your email" : undefined}
+              aria-label="Email address"
             />
             <TextField
               label="Password"
@@ -100,6 +116,9 @@ const AuthForm = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={loading}
+              autoComplete={isSignUp ? "new-password" : "current-password"}
+              helperText={isSignUp ? "Use at least 6 characters" : undefined}
+              aria-label="Password"
             />
             <Button
               type="submit"
@@ -121,6 +140,31 @@ const AuthForm = () => {
               {isSignUp ? 'Sign In' : 'Sign Up'}
             </Button>
           </Typography>
+
+          {/* Dev Bypass Button - Only shown in development */}
+          {isDev && (
+            <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+              <Button
+                fullWidth
+                variant="outlined"
+                color="warning"
+                onClick={handleDevBypass}
+                disabled={loading}
+                sx={{ 
+                  mt: 1,
+                  borderStyle: 'dashed',
+                  '&:hover': {
+                    borderStyle: 'solid',
+                  }
+                }}
+              >
+                🚀 Dev Bypass (Skip Auth)
+              </Button>
+              <Typography variant="caption" color="text.secondary" align="center" display="block" sx={{ mt: 1 }}>
+                Development mode only
+              </Typography>
+            </Box>
+          )}
         </Paper>
       </Box>
     </Container>

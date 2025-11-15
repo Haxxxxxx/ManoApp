@@ -1,4 +1,5 @@
-import { Song } from '../types';
+import { Song } from '../types/index';
+import { removeFileExtension } from '../utils/formatters';
 
 export interface LocalFile {
   name: string;
@@ -11,7 +12,7 @@ export interface LocalFile {
 export const convertLocalFileToSong = (file: LocalFile): Song => {
   return {
     id: `local-${file.path}-${file.lastModified.getTime()}`,
-    title: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
+    title: removeFileExtension(file.name),
     artist: 'Local File',
     duration: '0:00', // Default duration as string
     filePath: file.path,
@@ -52,7 +53,7 @@ export const scanDirectory = async (directoryHandle: FileSystemDirectoryHandle):
       }
     }
   } catch (error) {
-    console.error('Error scanning directory:', error);
+    // Error scanning directory
     throw new Error('Failed to scan directory for audio files');
   }
 

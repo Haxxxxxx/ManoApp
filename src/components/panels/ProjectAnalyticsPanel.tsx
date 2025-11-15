@@ -1,5 +1,6 @@
 import { Box, Typography, Paper, Grid, Card, CardContent, LinearProgress, Button } from '@mui/material';
 import { Song } from '../../types';
+import { parseDurationToSeconds, formatDuration } from '../../utils/formatters';
 
 interface ProjectAnalyticsPanelProps {
   songs: Song[];
@@ -10,8 +11,7 @@ const ProjectAnalyticsPanel = ({ songs, onClose }: ProjectAnalyticsPanelProps) =
   // Calculate statistics
   const totalSongs = songs.length;
   const totalDuration = songs.reduce((acc, song) => {
-    const [minutes, seconds] = song.duration.split(':').map(Number);
-    return acc + minutes * 60 + seconds;
+    return acc + parseDurationToSeconds(song.duration);
   }, 0);
   const averageBpm = songs.reduce((acc, song) => acc + (song.metadata?.bpm || 0), 0) / totalSongs || 0;
   
@@ -54,7 +54,7 @@ const ProjectAnalyticsPanel = ({ songs, onClose }: ProjectAnalyticsPanelProps) =
                   Total Duration
                 </Typography>
                 <Typography variant="h4">
-                  {Math.floor(totalDuration / 60)}:{(totalDuration % 60).toString().padStart(2, '0')}
+                  {formatDuration(totalDuration)}
                 </Typography>
               </CardContent>
             </Card>

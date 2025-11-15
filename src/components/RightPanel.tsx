@@ -12,12 +12,12 @@ const RightPanel = () => {
     try {
       await logout();
     } catch (error) {
-      console.error('Failed to log out:', error);
+      // Failed to log out
     }
   };
 
   const handleEditProfile = () => {
-    navigate('/profile/edit');
+    navigate('/profile');
   };
 
   return (

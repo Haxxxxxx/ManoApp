@@ -1,9 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Paper, Chip, Button } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { getSong } from '../services/firebaseService';
+import { getSong } from '../../services/firebaseService';
 import { useEffect, useState } from 'react';
-import { Song } from '../types';
+import { Song } from '../../types';
 
 const SongDetail = () => {
   const { songId } = useParams<{ songId: string }>();

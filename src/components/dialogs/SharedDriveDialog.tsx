@@ -54,7 +54,7 @@ const SharedDriveDialog: React.FC<SharedDriveDialogProps> = ({
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (err) {
-      console.error('Error downloading file:', err);
+      // Error downloading file
     }
   };
 

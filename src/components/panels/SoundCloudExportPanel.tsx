@@ -2,6 +2,7 @@ import { Box, Typography, Paper, Button, CircularProgress, Alert } from '@mui/ma
 import { useState, useEffect } from 'react';
 import { Song } from '../../types';
 import { exportForSoundCloud } from '../../services/exportService';
+import { getErrorMessage } from '../../utils/storageHelpers';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 
 interface SoundCloudExportPanelProps {
@@ -43,22 +44,11 @@ const SoundCloudExportPanel = ({ song, onClose }: SoundCloudExportPanelProps) =>
     setSuccess(false);
 
     try {
-      console.log('Starting export for song:', song.title);
       await exportForSoundCloud(song);
-      console.log('Export completed successfully');
       setSuccess(true);
     } catch (error) {
-      console.error('Error in export process:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to export for SoundCloud';
+      const errorMessage = getErrorMessage(error, 'Failed to export for SoundCloud');
       setError(errorMessage);
-      
-      // Log additional details about the song
-      console.error('Song details:', {
-        title: song.title,
-        filePath: song.filePath,
-        hasMetadata: !!song.metadata,
-        fileType: song.filePath?.split('.').pop()
-      });
     } finally {
       setExporting(false);
     }

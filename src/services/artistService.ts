@@ -32,11 +32,9 @@ export const createArtistProfile = async (userId: string, profileData: Partial<A
 
 export const getArtistProfile = async (userId: string) => {
   if (!db) {
-    console.error('Firestore is not initialized');
+    // Firestore is not initialized
     throw new Error('Firestore is not initialized');
   }
-  
-  console.log('Fetching artist profile for user:', userId);
   
   // Try both collection paths
   let artistDoc = null;
@@ -46,9 +44,8 @@ export const getArtistProfile = async (userId: string) => {
   try {
     const artistRef = doc(db, 'artists', userId);
     artistDoc = await getDoc(artistRef);
-    console.log('Artist profile fetch result from "artists" collection:', artistDoc.exists() ? 'Profile exists' : 'Profile does not exist');
   } catch (e) {
-    console.error('Error fetching from "artists" collection:', e);
+    // Error fetching from "artists" collection
     error = e;
   }
   
@@ -57,9 +54,8 @@ export const getArtistProfile = async (userId: string) => {
     try {
       const artistProfileRef = doc(db, 'artistProfiles', userId);
       artistDoc = await getDoc(artistProfileRef);
-      console.log('Artist profile fetch result from "artistProfiles" collection:', artistDoc.exists() ? 'Profile exists' : 'Profile does not exist');
     } catch (e) {
-      console.error('Error fetching from "artistProfiles" collection:', e);
+      // Error fetching from "artistProfiles" collection
       // If we already have an error, keep the first one
       if (!error) error = e;
     }
@@ -72,7 +68,7 @@ export const getArtistProfile = async (userId: string) => {
   
   // If we have an error and no document, throw the error
   if (error) {
-    console.error('Failed to fetch artist profile:', error);
+    // Failed to fetch artist profile
     // Don't throw the error, just return null
     // This allows the app to continue even if the profile can't be fetched
     return null;
@@ -82,7 +78,7 @@ export const getArtistProfile = async (userId: string) => {
   return null;
 };
 
-export const updateArtistProfile = async (userId: string, profileData: any) => {
+export const updateArtistProfile = async (userId: string, profileData: Partial<ArtistProfile>) => {
   if (!db) {
     throw new Error('Firestore is not initialized');
   }

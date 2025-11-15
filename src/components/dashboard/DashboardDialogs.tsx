@@ -14,7 +14,6 @@ import {
   LinearProgress,
   Box,
   Typography,
-  Alert,
   CircularProgress,
   List,
   ListItem,
@@ -33,11 +32,12 @@ import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import type { Trip } from '../../types/trip';
+import type { ActivityItem } from '../../types/activity';
 
 interface AnalyticsData {
   totalSongs: number;
   totalProjects: number;
-  recentActivity: any[];
+  recentActivity: ActivityItem[];
   totalPlaylists: number;
   totalCollaborators: number;
   projectsByMonth: { [key: string]: number };
@@ -98,7 +98,6 @@ const DashboardDialogs: React.FC<DashboardDialogsProps> = ({
   setShowAnalyticsDialog,
   analyticsData,
   deleteConfirmOpen,
-  setDeleteConfirmOpen,
   tripToDelete,
   deletingTripId,
   confirmDeleteTrip,
@@ -127,29 +126,65 @@ const DashboardDialogs: React.FC<DashboardDialogsProps> = ({
         onClose={() => !uploading && setShowUploadDialog(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, ${theme.palette.background.paper} 100%)`,
+          }
+        }}
+        TransitionProps={{
+          timeout: { enter: 300, exit: 200 },
+        }}
       >
         <DialogTitle>Upload Songs</DialogTitle>
         <DialogContent>
           <Box
             {...getRootProps()}
             sx={{
-              p: 3,
-              border: '2px dashed',
-              borderColor: isDragActive ? 'primary.main' : 'divider',
-              borderRadius: 2,
-              bgcolor: isDragActive ? alpha(theme.palette.primary.main, 0.05) : 'background.paper',
+              p: 4,
+              border: `2px dashed ${isDragActive ? theme.palette.primary.main : theme.palette.divider}`,
+              borderRadius: 3,
+              bgcolor: isDragActive 
+                ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`
+                : 'background.paper',
               textAlign: 'center',
               cursor: 'pointer',
-              transition: 'all 0.2s',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              position: 'relative',
+              overflow: 'hidden',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: '-100%',
+                width: '100%',
+                height: '100%',
+                background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.primary.main, 0.1)}, transparent)`,
+                transition: 'left 0.5s ease',
+              },
               '&:hover': {
                 borderColor: 'primary.main',
-                bgcolor: alpha(theme.palette.primary.main, 0.05),
+                borderWidth: 2,
+                bgcolor: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.secondary.main, 0.04)} 100%)`,
+                transform: 'translateY(-2px)',
+                boxShadow: `0px 4px 16px ${alpha(theme.palette.primary.main, 0.2)}`,
+                '&::before': {
+                  left: '100%',
+                },
               },
               mb: 2
             }}
           >
             <input {...getInputProps()} />
-            <CloudUploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <CloudUploadIcon 
+              sx={{ 
+                fontSize: 64, 
+                color: isDragActive ? 'primary.main' : 'text.secondary', 
+                mb: 2,
+                transition: 'all 0.3s ease',
+                transform: isDragActive ? 'scale(1.1) rotate(5deg)' : 'scale(1)',
+              }} 
+            />
             <Typography variant="h6" gutterBottom>
               {isDragActive ? 'Drop files here' : 'Drag & drop files here'}
             </Typography>
@@ -180,6 +215,15 @@ const DashboardDialogs: React.FC<DashboardDialogsProps> = ({
         onClose={() => !creating && setShowPlaylistDialog(false)}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, ${theme.palette.background.paper} 100%)`,
+          }
+        }}
+        TransitionProps={{
+          timeout: { enter: 300, exit: 200 },
+        }}
       >
         <DialogTitle>Create New Playlist</DialogTitle>
         <DialogContent>
@@ -193,7 +237,27 @@ const DashboardDialogs: React.FC<DashboardDialogsProps> = ({
             variant="outlined"
             value={playlistName}
             onChange={(e) => setPlaylistName(e.target.value)}
-            sx={{ mb: 2 }}
+            sx={{ 
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderWidth: 2,
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: theme.palette.primary.main,
+              },
+            }}
           />
           <TextField
             margin="dense"
@@ -206,7 +270,27 @@ const DashboardDialogs: React.FC<DashboardDialogsProps> = ({
             variant="outlined"
             value={playlistDescription}
             onChange={(e) => setPlaylistDescription(e.target.value)}
-            sx={{ mb: 2 }}
+            sx={{ 
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderWidth: 2,
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: theme.palette.primary.main,
+              },
+            }}
           />
           <FormControl fullWidth variant="outlined">
             <InputLabel id="visibility-label">Visibility</InputLabel>
@@ -227,7 +311,24 @@ const DashboardDialogs: React.FC<DashboardDialogsProps> = ({
           <Button onClick={() => setShowPlaylistDialog(false)} disabled={creating}>
             Cancel
           </Button>
-          <Button onClick={handleCreatePlaylist} variant="contained" disabled={creating}>
+          <Button 
+            onClick={handleCreatePlaylist} 
+            variant="contained" 
+            disabled={creating}
+            sx={{
+              borderRadius: 2,
+              fontWeight: 600,
+              textTransform: 'none',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              '&:hover:not(:disabled)': {
+                transform: 'translateY(-2px)',
+                boxShadow: `0px 6px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+              },
+              '&:active:not(:disabled)': {
+                transform: 'translateY(0)',
+              },
+            }}
+          >
             {creating ? 'Creating...' : 'Create'}
           </Button>
         </DialogActions>

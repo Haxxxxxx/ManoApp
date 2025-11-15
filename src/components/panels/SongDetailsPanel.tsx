@@ -26,7 +26,9 @@ import {
   Slider,
   alpha,
   Fade,
-  Zoom
+  Zoom,
+  Drawer,
+  useMediaQuery
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
@@ -41,11 +43,16 @@ import SkipNextIcon from '@mui/icons-material/SkipNext';
 import SkipPreviousIcon from '@mui/icons-material/SkipPrevious';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import CommentIcon from '@mui/icons-material/Comment';
 import { Song } from '../../types/song';
+import { isFeatureEnabled } from '../../config/features';
 import { updateSong, getSong } from '../../services/firebaseService';
 import { getAudioUrl, uploadCoverArt } from '../../services/storageService';
 import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { audioService } from '../../services/audioService';
+import { STORAGE_KEYS, storageHelpers } from '../../utils/storageHelpers';
+import { formatDuration, formatDurationFromString } from '../../utils/formatters';
 
 // Add this type definition after the imports and before the TabPanelProps interface
 type SongMetadata = {
@@ -87,12 +94,24 @@ interface SongDetailsPanelProps {
   song: Song;
   onClose: () => void;
   onSongUpdated: (updatedSong: Song) => void;
+  /** Optional callback to open mixer panel */
+  onOpenMixer?: (song: Song) => void;
+  /** Optional callback to open comments panel */
+  onOpenComments?: (songId: string) => void;
+  /** Optional project ID for comments */
+  projectId?: string;
+  /** Optional collaborators for comments */
+  collaborators?: Array<{ id: string; name: string; email?: string; avatar?: string }>;
 }
 
 const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   song,
   onClose,
-  onSongUpdated
+  onSongUpdated,
+  onOpenMixer,
+  onOpenComments,
+  projectId,
+  collaborators = []
 }) => {
   const theme = useTheme();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -231,7 +250,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       // Notify parent component
       onSongUpdated(updatedSong);
     } catch (error) {
-      console.error('Error adding tag:', error);
+      // Error adding tag
       
       // Revert local state if Firebase update fails
       setEditedSong(song);
@@ -260,7 +279,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       // Notify parent component
       onSongUpdated(updatedSong);
     } catch (error) {
-      console.error('Error removing tag:', error);
+      // Error removing tag
       
       // Revert local state if Firebase update fails
       setEditedSong(song);
@@ -302,32 +321,17 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
 
   // Function to get file info from localStorage
   const getFileDataFromLocalStorage = () => {
-    console.log('Getting file info from localStorage');
-    const fileInfo = localStorage.getItem(`fileInfo_${song.id}`);
-    if (fileInfo) {
-      console.log('Found file info in localStorage');
-      return JSON.parse(fileInfo);
-    }
-    return null;
+    return storageHelpers.getItem(STORAGE_KEYS.FILE_INFO(song.id));
   };
 
   // Add a function to store blob URL in localStorage
   const storeBlobUrl = (songId: string, blobUrl: string) => {
-    try {
-      localStorage.setItem(`blobUrl_${songId}`, blobUrl);
-    } catch (error) {
-      console.warn('Failed to store blob URL in localStorage:', error);
-    }
+    storageHelpers.setItem(STORAGE_KEYS.BLOB_URL(songId), blobUrl);
   };
 
   // Add a function to get blob URL from localStorage
   const getBlobUrl = (songId: string): string | null => {
-    try {
-      return localStorage.getItem(`blobUrl_${songId}`);
-    } catch (error) {
-      console.warn('Failed to get blob URL from localStorage:', error);
-      return null;
-    }
+    return storageHelpers.getItem<string>(STORAGE_KEYS.BLOB_URL(songId));
   };
 
   // Add function to get authenticated URL
@@ -343,7 +347,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       }
       return filePath;
     } catch (error) {
-      console.error('Error getting authenticated URL:', error);
+      // Error getting authenticated URL
       return filePath;
     }
   };
@@ -351,10 +355,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   // Update useEffect for audio initialization
   useEffect(() => {
     const initializeAudio = async () => {
-      console.log('Initializing audio source');
-      
       if (!song.filePath) {
-        console.warn('No file path available');
         return;
       }
 
@@ -363,22 +364,10 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
         const audio = await audioService.createAudioElement(song.filePath);
         
         // Add event listeners
-        audio.addEventListener('loadstart', () => console.log('Audio loading started'));
         audio.addEventListener('loadedmetadata', () => {
-          console.log('Audio metadata loaded, duration:', audio.duration);
           setDuration(audio.duration);
         });
-        audio.addEventListener('canplay', () => console.log('Audio can play'));
-        audio.addEventListener('canplaythrough', () => console.log('Audio can play through'));
-        audio.addEventListener('progress', () => console.log('Audio loading in progress'));
-        audio.addEventListener('error', (e) => {
-          console.error('Audio error details:', {
-            error: audio.error,
-            currentSrc: audio.currentSrc,
-            networkState: audio.networkState,
-            readyState: audio.readyState,
-            paused: audio.paused,
-          });
+        audio.addEventListener('error', () => {
           setError('Failed to load audio file. Please try again.');
         });
         
@@ -388,13 +377,12 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
 
         // Clean up function
         return () => {
-          console.log('Cleaning up audio element');
           audio.pause();
           audio.src = '';
           audio.load();
         };
       } catch (error) {
-        console.error('Error initializing audio:', error);
+        // Error initializing audio
         setError('Failed to initialize audio. Please try again.');
       }
     };
@@ -409,19 +397,16 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     }
 
     if (isPlaying) {
-      console.log('Pausing audio');
       audioElement.pause();
       setIsPlaying(false);
     } else {
-      console.log('Playing audio');
       audioElement.play()
         .then(() => {
-          console.log('Audio playback started successfully');
           setIsPlaying(true);
           setError(null);
         })
         .catch(error => {
-          console.error('Error playing audio:', error);
+          // Error playing audio
           setError(`Failed to play audio file: ${error.message}`);
           setIsPlaying(false);
         });
@@ -446,7 +431,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       setIsEditing(false);
     } catch (err) {
       setError('Failed to update song');
-      console.error('Error updating song:', err);
+      // Error updating song
     } finally {
       setIsLoading(false);
     }
@@ -457,15 +442,26 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     setIsEditing(false);
   };
 
-  const formatDuration = (duration: string | number) => {
-    if (typeof duration === 'string' && duration.includes(':')) {
-      return duration;
-    }
-    return audioService.formatDuration(Number(duration));
-  };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
+    
+    // Auto-open mixer if stems tab is selected and mixer callback is available
+    if (isFeatureEnabled('stemsAndMixer') && 
+        song.stems && 
+        song.stems.length > 0 && 
+        onOpenMixer &&
+        newValue === 4) {
+      onOpenMixer(editedSong);
+    }
+    
+    // Auto-open comments if comments tab is selected and callback is available
+    if (isFeatureEnabled('comments') && 
+        projectId && 
+        onOpenComments &&
+        newValue === (isFeatureEnabled('stemsAndMixer') && song.stems && song.stems.length > 0 ? 5 : 4)) {
+      onOpenComments(song.id);
+    }
   };
 
   const handleAddTag = async () => {
@@ -495,7 +491,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       // Notify parent component
       onSongUpdated(updatedSong);
     } catch (error) {
-      console.error('Error adding tag:', error);
+      // Error adding tag
       
       // Revert local state if Firebase update fails
       setEditedSong(song);
@@ -540,7 +536,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       // Notify parent component
       onSongUpdated(updatedSong);
     } catch (error) {
-      console.error('Error adding genre:', error);
+      // Error adding genre
       
       // Revert local state if Firebase update fails
       setEditedSong(song);
@@ -569,7 +565,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       // Notify parent component
       onSongUpdated(updatedSong);
     } catch (error) {
-      console.error('Error removing genre:', error);
+      // Error removing genre
       
       // Revert local state if Firebase update fails
       setEditedSong(song);
@@ -644,7 +640,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       await handleSave();
     } catch (err) {
       setError('Failed to upload image');
-      console.error('Error uploading image:', err);
+      // Error uploading image
     } finally {
       setIsLoading(false);
     }
@@ -687,9 +683,9 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
           lastModified: file.lastModified,
           type: file.type
         };
-        localStorage.setItem(`fileInfo_${song.id}`, JSON.stringify(fileInfo));
+        storageHelpers.setItem(STORAGE_KEYS.FILE_INFO(song.id), fileInfo);
       } catch (storageError) {
-        console.warn('Could not store file info in localStorage:', storageError);
+        // Silently fail - localStorage may be full or unavailable
       }
 
       // Update the song state
@@ -706,7 +702,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       }
 
     } catch (err) {
-      console.error('Error handling file selection:', err);
+      // Error handling file selection
       setError('Failed to load selected file');
     } finally {
       setIsLoading(false);
@@ -715,23 +711,29 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
 
   // Fetch the latest song data when the panel is opened
   useEffect(() => {
+    let cancelled = false;
+
     const fetchLatestSongData = async () => {
       try {
         // Only fetch from Firebase if it's not a local file
         if (song.metadata?.source !== 'local') {
           // Fetch the latest song data from Firebase
           const latestSong = await getSong(song.id);
-          if (latestSong) {
+          if (!cancelled && latestSong) {
             // Update the local state with the latest song data
             setEditedSong(latestSong);
           }
         }
       } catch (error) {
-        console.error('Error fetching latest song data:', error);
+        // Error fetching latest song data - silently fail
       }
     };
 
     fetchLatestSongData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [song.id]);
 
   // Update editedSong when song prop changes
@@ -771,88 +773,226 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     }
   };
 
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
   return (
-    <Box
+    <Drawer
+      anchor={isMobile ? 'bottom' : 'right'}
+      open={true}
+      onClose={onClose}
+      PaperProps={{
+        sx: {
+          width: isMobile ? '100%' : 640,
+          maxWidth: '100%',
+          height: isMobile ? '90vh' : '100%',
+          borderRadius: isMobile ? '16px 16px 0 0' : 0,
+          bgcolor: 'background.paper',
+          background: theme.palette.mode === 'dark'
+            ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.12)} 0%, ${theme.palette.background.paper} 50%, ${alpha(theme.palette.secondary.main, 0.08)} 100%)`
+            : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.06)} 0%, ${theme.palette.background.paper} 50%, ${alpha(theme.palette.secondary.main, 0.04)} 100%)`,
+          backgroundAttachment: 'fixed',
+          backgroundSize: 'cover',
+          boxShadow: theme.palette.mode === 'dark'
+            ? '0px 8px 32px rgba(0, 0, 0, 0.5)'
+            : '0px 8px 32px rgba(0, 0, 0, 0.15)',
+          borderLeft: isMobile ? 'none' : `1px solid ${alpha(theme.palette.divider, 0.5)}`,
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: theme.palette.mode === 'dark' ? alpha(theme.palette.primary.main, 0.1) : alpha(theme.palette.secondary.main, 0.1),
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            borderRadius: '4px',
+            '&:hover': {
+              background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,
+            },
+          },
+        }
+      }}
       sx={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        backgroundColor: 'background.paper',
-        boxShadow: 3,
-        maxHeight: '80vh',
-        overflow: 'auto',
-        transition: 'transform 0.3s ease-in-out',
-        transform: 'translateY(0)',
-        '&:hover': {
-          transform: 'translateY(-4px)',
+        zIndex: 1200,
+        '& .MuiBackdrop-root': {
+          backgroundColor: alpha(theme.palette.common.black, 0.6),
+          backdropFilter: 'blur(4px)',
         },
       }}
     >
-      <Paper
-        elevation={3}
+      <Box
         sx={{
-          p: 3,
-          borderRadius: '16px 16px 0 0',
-          background: theme => `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          bgcolor: 'background.paper',
+          background: theme.palette.mode === 'dark'
+            ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${theme.palette.background.paper} 100%)`
+            : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" component="h2">
-            {isEditing ? 'Edit Song' : song.title}
-          </Typography>
-          <IconButton onClick={onClose} size="small">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        {error && (
-          <Alert 
-            severity="error" 
-            sx={{ mb: 2, borderRadius: 2 }}
-            action={
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={() => fileInputRef.current?.click()}
-                startIcon={<AddIcon />}
-              >
-                Select Audio File
-              </Button>
-            }
-          >
-            <Typography variant="body1" gutterBottom>
-              {error}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Please select a valid audio file to play this song.
-            </Typography>
-          </Alert>
-        )}
-
-        <Tabs 
-          value={activeTab} 
-          onChange={handleTabChange} 
-          sx={{ 
-            borderBottom: 1, 
-            borderColor: 'divider',
-            mb: 2,
-            '& .MuiTab-root': {
-              textTransform: 'none',
-              fontWeight: 'medium',
-              minWidth: 100
-            }
+        {/* Header */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 2.5,
+            borderBottom: `2px solid ${alpha(theme.palette.divider, 0.3)}`,
+            background: theme.palette.mode === 'dark'
+              ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.15)} 0%, ${alpha(theme.palette.secondary.main, 0.1)} 100%)`
+              : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.08)} 100%)`,
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            borderRadius: 0,
+            boxShadow: `0px 2px 8px ${alpha(theme.palette.common.black, 0.05)}`,
           }}
-          variant="fullWidth"
         >
-          <Tab label="Details" />
-          <Tab label="Lyrics" />
-          <Tab label="Media" />
-          <Tab label="Metadata" />
-        </Tabs>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0, mr: 1 }}>
+              <Typography 
+                variant="h6" 
+                component="h2"
+                sx={{
+                  fontWeight: 700,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  mb: 0.5,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                {isEditing ? 'Edit Song' : song.title}
+              </Typography>
+              {!isEditing && song.artist && (
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontWeight: 500,
+                  }}
+                >
+                  {song.artist}
+                </Typography>
+              )}
+            </Box>
+            <IconButton 
+              onClick={onClose} 
+              size="small"
+              sx={{
+                ml: 1,
+                borderRadius: 2,
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  bgcolor: alpha(theme.palette.error.main, 0.15),
+                  color: 'error.main',
+                  transform: 'scale(1.1)',
+                },
+              }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
 
-        <TabPanel value={activeTab} index={0}>
+          {/* Tabs */}
+          <Box sx={{ mt: 1.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.2)}` }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={handleTabChange}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{
+                minHeight: 48,
+                '& .MuiTab-root': {
+                  minHeight: 48,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  color: 'text.secondary',
+                  transition: 'all 0.2s ease-in-out',
+                  borderRadius: '8px 8px 0 0',
+                  '&:hover': {
+                    color: theme.palette.primary.main,
+                    bgcolor: alpha(theme.palette.primary.main, 0.05),
+                  },
+                  '&.Mui-selected': {
+                    color: theme.palette.primary.main,
+                    fontWeight: 700,
+                  },
+                },
+                '& .MuiTabs-indicator': {
+                  height: 3,
+                  borderRadius: '3px 3px 0 0',
+                  background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                },
+              }}
+            >
+              <Tab label="Details" />
+              <Tab label="Lyrics" />
+              <Tab label="Media" />
+              <Tab label="Metadata" />
+              {isFeatureEnabled('stemsAndMixer') && song.stems && song.stems.length > 0 && (
+                <Tab label="Stems" icon={<GraphicEqIcon />} iconPosition="start" />
+              )}
+              {isFeatureEnabled('comments') && projectId && (
+                <Tab label="Comments" icon={<CommentIcon />} iconPosition="start" />
+              )}
+            </Tabs>
+          </Box>
+        </Paper>
+
+        {/* Tab Content - Scrollable */}
+        <Box
+          sx={{
+            flex: 1,
+            overflow: 'auto',
+            px: 3,
+            pt: 3,
+            pb: 3,
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: 'transparent',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.3)} 0%, ${alpha(theme.palette.secondary.main, 0.3)} 100%)`,
+              borderRadius: '4px',
+              '&:hover': {
+                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.5)} 0%, ${alpha(theme.palette.secondary.main, 0.5)} 100%)`,
+              },
+            },
+          }}
+        >
+          {error && (
+            <Alert 
+              severity="error" 
+              sx={{ mb: 2, borderRadius: 2, mt: 2 }}
+              action={
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => fileInputRef.current?.click()}
+                  startIcon={<AddIcon />}
+                  size="small"
+                >
+                  Select Audio File
+                </Button>
+              }
+            >
+              <Typography variant="body2" gutterBottom>
+                {error}
+              </Typography>
+            </Alert>
+          )}
+
+          <TabPanel value={activeTab} index={0}>
           <Grid container spacing={3}>
             <Grid item xs={12}>
               <Zoom in={true}>
@@ -873,9 +1013,25 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
                 >
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={6}>
-                      <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                        Basic Information
-                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="subtitle1" color="text.secondary">
+                          Basic Information
+                        </Typography>
+                        {!isEditing && (
+                          <IconButton
+                            size="small"
+                            onClick={() => setIsEditing(true)}
+                            sx={{
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                color: 'primary.main',
+                              },
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Box>
                       <Stack spacing={2}>
                         <Box>
                           <Typography variant="subtitle2" color="text.secondary">Title</Typography>
@@ -909,38 +1065,139 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
                         </Box>
                         <Box>
                           <Typography variant="subtitle2" color="text.secondary">Duration</Typography>
-                          <Typography variant="body1">{formatDuration(song.duration)}</Typography>
+                          <Typography variant="body1">{formatDurationFromString(song.duration)}</Typography>
                         </Box>
                       </Stack>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                        Technical Details
-                      </Typography>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="subtitle1" color="text.secondary">
+                          Technical Details
+                        </Typography>
+                        {!isEditing && (
+                          <IconButton
+                            size="small"
+                            onClick={() => setIsEditing(true)}
+                            sx={{
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                                color: 'primary.main',
+                              },
+                            }}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Box>
                       <Stack spacing={2}>
-                        {song.metadata?.bpm && (
-                          <Box>
-                            <Typography variant="subtitle2" color="text.secondary">BPM</Typography>
-                            <Typography variant="body1">{song.metadata.bpm}</Typography>
-                          </Box>
-                        )}
-                        {song.metadata?.key && (
-                          <Box>
-                            <Typography variant="subtitle2" color="text.secondary">Key</Typography>
-                            <Typography variant="body1">{song.metadata.key}</Typography>
-                          </Box>
-                        )}
-                        {song.metadata?.releaseDate && (
-                          <Box>
-                            <Typography variant="subtitle2" color="text.secondary">Release Date</Typography>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">BPM</Typography>
+                          {isEditing ? (
+                            <TextField
+                              type="number"
+                              value={editedSong.metadata?.bpm || ''}
+                              onChange={(e) => setEditedSong({
+                                ...editedSong,
+                                metadata: {
+                                  ...editedSong.metadata,
+                                  bpm: e.target.value ? parseInt(e.target.value) : undefined,
+                                }
+                              })}
+                              fullWidth
+                              variant="outlined"
+                              size="small"
+                              placeholder="Enter BPM"
+                              sx={{ mt: 0.5 }}
+                            />
+                          ) : (
                             <Typography variant="body1">
-                              {new Date(song.metadata.releaseDate).toLocaleDateString()}
+                              {editedSong.metadata?.bpm || 'Not set'}
                             </Typography>
-                          </Box>
-                        )}
+                          )}
+                        </Box>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Key</Typography>
+                          {isEditing ? (
+                            <TextField
+                              value={editedSong.metadata?.key || ''}
+                              onChange={(e) => setEditedSong({
+                                ...editedSong,
+                                metadata: {
+                                  ...editedSong.metadata,
+                                  key: e.target.value || undefined,
+                                }
+                              })}
+                              fullWidth
+                              variant="outlined"
+                              size="small"
+                              placeholder="e.g., C Major, A Minor"
+                              sx={{ mt: 0.5 }}
+                            />
+                          ) : (
+                            <Typography variant="body1">
+                              {editedSong.metadata?.key || 'Not set'}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Box>
+                          <Typography variant="subtitle2" color="text.secondary">Release Date</Typography>
+                          {isEditing ? (
+                            <TextField
+                              type="date"
+                              value={editedSong.metadata?.releaseDate ? new Date(editedSong.metadata.releaseDate).toISOString().split('T')[0] : ''}
+                              onChange={(e) => setEditedSong({
+                                ...editedSong,
+                                metadata: {
+                                  ...editedSong.metadata,
+                                  releaseDate: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                                }
+                              })}
+                              fullWidth
+                              variant="outlined"
+                              size="small"
+                              InputLabelProps={{ shrink: true }}
+                              sx={{ mt: 0.5 }}
+                            />
+                          ) : (
+                            <Typography variant="body1">
+                              {editedSong.metadata?.releaseDate 
+                                ? new Date(editedSong.metadata.releaseDate).toLocaleDateString()
+                                : 'Not set'}
+                            </Typography>
+                          )}
+                        </Box>
                       </Stack>
                     </Grid>
                   </Grid>
+                  
+                  {/* Edit Actions */}
+                  {isEditing && (
+                    <Box sx={{ 
+                      mt: 3, 
+                      display: 'flex', 
+                      gap: 2, 
+                      justifyContent: 'flex-end', 
+                      pt: 2, 
+                      borderTop: `1px solid ${alpha(theme.palette.divider, 0.2)}` 
+                    }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleCancel}
+                        sx={{ borderRadius: 2 }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="contained"
+                        onClick={handleSave}
+                        disabled={isLoading}
+                        startIcon={isLoading ? <CircularProgress size={20} /> : <SaveIcon />}
+                        sx={{ borderRadius: 2 }}
+                      >
+                        Save Changes
+                      </Button>
+                    </Box>
+                  )}
                 </Paper>
               </Zoom>
             </Grid>
@@ -1146,65 +1403,139 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
                     }
                   }}
                 >
-                  <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                  <Typography 
+                    variant="subtitle1" 
+                    color="text.secondary" 
+                    gutterBottom
+                    sx={{ 
+                      fontWeight: 600,
+                      mb: 2,
+                    }}
+                  >
                     Cover Art
                   </Typography>
-                  <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                    {editedSong.imagePath ? (
-                      <Card 
-                        sx={{ 
-                          maxWidth: 300,
-                          borderRadius: 2,
-                          overflow: 'hidden',
-                          transition: 'transform 0.3s ease-in-out',
-                          '&:hover': {
-                            transform: 'scale(1.02)',
-                          }
-                        }}
-                      >
-                        <CardMedia
-                          component="img"
-                          height="300"
-                          image={editedSong.imagePath}
-                          alt={editedSong.title}
-                          sx={{ objectFit: 'cover' }}
-                        />
-                        <CardContent>
-                          <Typography variant="body2" color="text.secondary">
-                            Cover Art
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box
+                      sx={{
+                        width: '100%',
+                        maxWidth: 400,
+                        aspectRatio: '1',
+                        borderRadius: 3,
+                        overflow: 'hidden',
+                        position: 'relative',
+                        bgcolor: theme.palette.mode === 'dark' 
+                          ? alpha(theme.palette.background.paper, 0.8)
+                          : 'background.paper',
+                        border: `2px solid ${alpha(theme.palette.divider, 0.3)}`,
+                        boxShadow: `0px 4px 16px ${alpha(theme.palette.common.black, 0.1)}`,
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: `0px 8px 24px ${alpha(theme.palette.primary.main, 0.25)}`,
+                          borderColor: theme.palette.primary.main,
+                          '& .cover-overlay': {
+                            opacity: 1,
+                          },
+                        },
+                      }}
+                    >
+                      {editedSong.imagePath ? (
+                        <>
+                          <Box
+                            component="img"
+                            src={editedSong.imagePath}
+                            alt={editedSong.title || 'Cover Art'}
+                            sx={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              display: 'block',
+                            }}
+                            onError={(e) => {
+                              // Fallback if image fails to load
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                            }}
+                          />
+                          {/* Gradient overlay on hover */}
+                          <Box
+                            className="cover-overlay"
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.15)} 0%, transparent 100%)`,
+                              opacity: 0,
+                              transition: 'opacity 0.3s ease',
+                              pointerEvents: 'none',
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <Box
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            bgcolor: theme.palette.mode === 'dark'
+                              ? alpha(theme.palette.background.default, 0.5)
+                              : alpha(theme.palette.background.default, 0.3),
+                            border: `2px dashed ${alpha(theme.palette.divider, 0.5)}`,
+                            borderRadius: 3,
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              borderColor: theme.palette.primary.main,
+                              bgcolor: alpha(theme.palette.primary.main, 0.05),
+                            },
+                          }}
+                        >
+                          <ImageIcon 
+                            sx={{ 
+                              fontSize: 64, 
+                              color: 'text.secondary', 
+                              opacity: 0.4,
+                              mb: 1,
+                            }} 
+                          />
+                          <Typography 
+                            variant="body2" 
+                            color="text.secondary"
+                            sx={{ opacity: 0.6 }}
+                          >
+                            No cover art
                           </Typography>
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      <Box
-                        sx={{
-                          width: 300,
-                          height: 300,
-                          bgcolor: 'background.paper',
-                          borderRadius: 2,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: '2px dashed',
-                          borderColor: 'divider',
-                        }}
-                      >
-                        <ImageIcon sx={{ fontSize: 60, color: 'text.secondary', opacity: 0.5 }} />
-                      </Box>
-                    )}
+                        </Box>
+                      )}
+                    </Box>
                     {isEditing && (
                       <Button
                         variant="outlined"
                         component="label"
                         startIcon={<ImageIcon />}
+                        fullWidth
                         sx={{ 
-                          height: 'fit-content',
-                          alignSelf: 'center',
                           borderRadius: 2,
                           borderStyle: 'dashed',
+                          borderWidth: 2,
+                          py: 1.5,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          transition: 'all 0.2s ease-in-out',
+                          '&:hover': {
+                            borderStyle: 'solid',
+                            borderColor: 'primary.main',
+                            bgcolor: alpha(theme.palette.primary.main, 0.05),
+                            transform: 'translateY(-2px)',
+                            boxShadow: `0px 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
+                          },
                         }}
                       >
-                        {editedSong.imagePath ? 'Change Image' : 'Upload Image'}
+                        {editedSong.imagePath ? 'Change Cover Art' : 'Upload Cover Art'}
                         <input
                           type="file"
                           hidden
@@ -1592,72 +1923,106 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
               </Paper>
             </Grid>
           </Grid>
-        </TabPanel>
+          </TabPanel>
 
-        {/* Add local file indicator */}
-        {isLocalFile && (
-          <Chip
-            label="Local File"
-            color="primary"
-            size="small"
-            sx={{ mb: 2 }}
-          />
-        )}
-
-        {/* Display metadata */}
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="subtitle2" color="text.secondary">
-            Source: {isLocalFile ? 'Local File' : 'Firebase'}
-          </Typography>
-          {isLocalFile && song.metadata?._originalFileName && (
-            <Typography variant="subtitle2" color="text.secondary">
-              Original File: {song.metadata._originalFileName}
-            </Typography>
+          {/* Stems Tab */}
+          {isFeatureEnabled('stemsAndMixer') && song.stems && song.stems.length > 0 && (
+            <TabPanel value={activeTab} index={4}>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Typography variant="h6" fontWeight="bold">
+                        Stems ({song.stems.length})
+                      </Typography>
+                      {onOpenMixer && (
+                        <Button
+                          variant="contained"
+                          startIcon={<GraphicEqIcon />}
+                          onClick={() => onOpenMixer(editedSong)}
+                          sx={{ borderRadius: 2 }}
+                        >
+                          Open Mixer
+                        </Button>
+                      )}
+                    </Box>
+                    <Grid container spacing={2}>
+                      {song.stems.map((stem) => (
+                        <Grid item xs={12} sm={6} md={4} key={stem.id}>
+                          <Paper
+                            elevation={0}
+                            sx={{
+                              p: 2,
+                              borderRadius: 2,
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              '&:hover': {
+                                borderColor: 'primary.main',
+                                bgcolor: alpha(theme.palette.primary.main, 0.05),
+                              },
+                            }}
+                          >
+                            <Typography variant="subtitle1" fontWeight="600">
+                              {stem.label}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {typeof stem.duration === 'number' 
+                                ? formatDuration(stem.duration) 
+                                : stem.duration}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                      ))}
+                    </Grid>
+                    {!onOpenMixer && (
+                      <Alert severity="info" sx={{ mt: 2 }}>
+                        Mixer feature is available. Enable it in settings to access the mixer.
+                      </Alert>
+                    )}
+                  </Paper>
+                </Grid>
+              </Grid>
+            </TabPanel>
           )}
-          {/* ... rest of metadata display ... */}
+
+          {/* Comments Tab */}
+          {isFeatureEnabled('comments') && projectId && (
+            <TabPanel value={activeTab} index={isFeatureEnabled('stemsAndMixer') && song.stems && song.stems.length > 0 ? 5 : 4}>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Typography variant="h6" fontWeight="bold">
+                        Comments
+                      </Typography>
+                      {onOpenComments && (
+                        <Button
+                          variant="outlined"
+                          startIcon={<CommentIcon />}
+                          onClick={() => onOpenComments(song.id)}
+                          sx={{ borderRadius: 2 }}
+                        >
+                          View All Comments
+                        </Button>
+                      )}
+                    </Box>
+                    {onOpenComments ? (
+                      <Alert severity="info">
+                        Click "View All Comments" to see and manage comments for this song.
+                      </Alert>
+                    ) : (
+                      <Alert severity="info">
+                        Comments feature is available. Enable it in settings to access comments.
+                      </Alert>
+                    )}
+                  </Paper>
+                </Grid>
+              </Grid>
+            </TabPanel>
+          )}
         </Box>
 
-        <Box sx={{ 
-          mt: 'auto', 
-          pt: 2, 
-          borderTop: 1, 
-          borderColor: 'divider',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: 1
-        }}>
-          {isEditing ? (
-            <>
-              <Button 
-                onClick={handleCancel}
-                variant="outlined"
-                sx={{ borderRadius: 2 }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleSave}
-                disabled={isLoading}
-                startIcon={isLoading ? <CircularProgress size={20} /> : <SaveIcon />}
-                sx={{ borderRadius: 2 }}
-              >
-                Save
-              </Button>
-            </>
-          ) : (
-            <Button
-              startIcon={<EditIcon />}
-              onClick={handleEdit}
-              variant="contained"
-              sx={{ borderRadius: 2 }}
-            >
-              Edit
-            </Button>
-          )}
-        </Box>
-
-        {/* Add hidden file input */}
+        {/* Hidden file input */}
         <input
           type="file"
           ref={fileInputRef}
@@ -1665,122 +2030,8 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
           accept="audio/*"
           onChange={handleFileSelect}
         />
-
-        {/* Audio Player Section */}
-        <Box sx={{ mb: 3 }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={4}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <IconButton 
-                  onClick={handlePlayPause}
-                  disabled={isLoading || !audioUrl || !audioElement}
-                  color="primary"
-                  sx={{ 
-                    width: 56, 
-                    height: 56,
-                    bgcolor: 'primary.main',
-                    color: 'white',
-                    '&:hover': {
-                      bgcolor: 'primary.dark',
-                      transform: 'scale(1.1)',
-                    },
-                    transition: 'all 0.2s ease-in-out',
-                  }}
-                >
-                  {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-                </IconButton>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="h5" fontWeight="bold" noWrap>
-                    {isEditing ? (
-                      <TextField
-                        value={editedSong.title}
-                        onChange={(e) => setEditedSong({ ...editedSong, title: e.target.value })}
-                        fullWidth
-                        variant="standard"
-                        sx={{ 
-                          '& .MuiInputBase-input': {
-                            fontSize: '1.5rem',
-                            fontWeight: 'bold'
-                          }
-                        }}
-                      />
-                    ) : (
-                      song.title
-                    )}
-                  </Typography>
-                  <Typography variant="subtitle1" color="text.secondary" noWrap>
-                    {song.artist}
-                  </Typography>
-                </Box>
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={8}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  {formatDuration(currentTime)}
-                </Typography>
-                <Slider
-                  value={currentTime / (duration || 1)}
-                  onChange={handleProgressChange}
-                  sx={{
-                    color: 'primary.main',
-                    '& .MuiSlider-thumb': {
-                      width: 12,
-                      height: 12,
-                      transition: '0.2s',
-                      '&:hover, &.Mui-focusVisible': {
-                        boxShadow: '0px 0px 0px 8px rgb(117 117 117 / 16%)',
-                      },
-                    },
-                    '& .MuiSlider-track': {
-                      transition: '0.2s',
-                    },
-                  }}
-                />
-                <Typography variant="body2" color="text.secondary">
-                  {formatDuration(duration)}
-                </Typography>
-                <Box sx={{ position: 'relative' }}>
-                  <IconButton
-                    onClick={handleMuteToggle}
-                    onMouseEnter={() => setShowVolumeSlider(true)}
-                    onMouseLeave={() => setShowVolumeSlider(false)}
-                  >
-                    {isMuted ? <VolumeOffIcon /> : <VolumeUpIcon />}
-                  </IconButton>
-                  <Fade in={showVolumeSlider}>
-                    <Box
-                      ref={volumeSliderRef}
-                      sx={{
-                        position: 'absolute',
-                        bottom: '100%',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        bgcolor: 'background.paper',
-                        p: 1,
-                        borderRadius: 1,
-                        boxShadow: 1,
-                        width: 100,
-                      }}
-                    >
-                      <Slider
-                        orientation="vertical"
-                        value={volume}
-                        onChange={handleVolumeChange}
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        sx={{ height: 100 }}
-                      />
-                    </Box>
-                  </Fade>
-                </Box>
-              </Box>
-            </Grid>
-          </Grid>
-        </Box>
-      </Paper>
-    </Box>
+      </Box>
+    </Drawer>
   );
 };
 

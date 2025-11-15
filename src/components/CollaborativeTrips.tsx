@@ -35,7 +35,7 @@ const CollaborativeTrips: React.FC = () => {
         const collaborativeTrips = await getCollaborativeTrips(currentUser.uid);
         setTrips(collaborativeTrips);
       } catch (err) {
-        console.error('Error fetching collaborative trips:', err);
+        // Error fetching collaborative trips
         setError('Failed to load collaborative trips');
       } finally {
         setLoading(false);

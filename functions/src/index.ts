@@ -7,5 +7,8 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+// Export AI metadata function
+export { aiMetadata } from './aiMetadata';
+
+// Export release validation function
+export { validateRelease } from './releaseValidation';

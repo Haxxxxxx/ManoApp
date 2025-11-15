@@ -25,7 +25,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { Song } from '../types/song';
 import LocalFileBrowser from './LocalFileBrowser';
 import { LocalFile, convertLocalFileToSong } from '../services/localFileService';
-import { deleteSong } from '../services/firebaseService';
+import { formatDurationFromString, formatDuration, parseDurationToSeconds } from '../utils/formatters';
+import { useSongs } from '../hooks/useSongs';
+import { getErrorMessage } from '../utils/storageHelpers';
 
 interface ProjectDetailsProps {
   trip: {
@@ -42,20 +44,51 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ trip, onSongsUpdated })
   const [deletingSongId, setDeletingSongId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLocalFilesSelected = async (files: File[]) => {
-    const newSongs = files.map(file => {
-      const localFile = {
-        name: file.name,
-        path: file.name, // Using name as path since we don't have full path
-        size: file.size,
-        type: file.type,
-        lastModified: new Date(file.lastModified)
-      };
-      return convertLocalFileToSong(localFile);
-    });
+  // Use useSongs hook for proper data management
+  const { songs, removeSong, addSong, refresh } = useSongs({
+    tripId: trip.id,
+    autoFetch: true
+  });
 
-    onSongsUpdated([...trip.songs, ...newSongs]);
-    setShowLocalFiles(false);
+  // Sync songs with parent when they change
+  // Note: trip.songs is always empty (songs collection is source of truth)
+  // We only notify parent of changes, not compare with trip.songs
+  React.useEffect(() => {
+    onSongsUpdated(songs);
+    // Note: Intentionally only depend on songs to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [songs]);
+
+  const handleLocalFilesSelected = async (files: File[]) => {
+    try {
+      setError(null);
+      // Convert local files to songs and add them
+      for (const file of files) {
+        const localFile = {
+          name: file.name,
+          path: file.name,
+          size: file.size,
+          type: file.type,
+          lastModified: new Date(file.lastModified)
+        };
+        const songData = convertLocalFileToSong(localFile);
+        // Create song in Firebase if it's not a local-only file
+        if (songData.userId !== 'local') {
+          await addSong({
+            title: songData.title,
+            artist: songData.artist,
+            duration: songData.duration,
+            filePath: songData.filePath,
+            userId: songData.userId,
+            metadata: songData.metadata
+          });
+        }
+      }
+      await refresh();
+      setShowLocalFiles(false);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to add local files'));
+    }
   };
 
   const handleRemoveSong = async (songId: string) => {
@@ -63,30 +96,13 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ trip, onSongsUpdated })
     setError(null);
     
     try {
-      // Delete from Firebase
-      await deleteSong(songId);
-      
-      // Update local state
-      const updatedSongs = trip.songs.filter(song => song.id !== songId);
-      onSongsUpdated(updatedSongs);
-    } catch (error) {
-      console.error('Error deleting song:', error);
-      setError('Failed to delete song. Please try again.');
+      await removeSong(songId);
+      await refresh();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to delete song'));
     } finally {
       setDeletingSongId(null);
     }
-  };
-
-  const formatDuration = (duration: string) => {
-    // If duration is already formatted (e.g., "3:45"), return as is
-    if (duration.includes(':')) {
-      return duration;
-    }
-    // Otherwise, format the number of seconds
-    const seconds = parseInt(duration);
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -123,21 +139,19 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ trip, onSongsUpdated })
         <Stack spacing={2}>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Chip
-              label={`${trip.songs.length} Songs`}
+              label={`${songs.length} Songs`}
               color="primary"
               variant="outlined"
             />
             <Chip
-              label={`${trip.songs.filter(song => song.metadata?.source === 'local').length} Local Files`}
+              label={`${songs.filter(song => song.metadata?.source === 'local').length} Local Files`}
               color="secondary"
               variant="outlined"
             />
             <Chip
-              label={`Total Duration: ${trip.songs.reduce((acc, song) => {
-                const duration = song.duration;
-                const [minutes, seconds] = duration.split(':').map(Number);
-                return acc + (minutes * 60 + seconds);
-              }, 0)} seconds`}
+              label={`Total Duration: ${formatDuration(songs.reduce((acc, song) => {
+                return acc + parseDurationToSeconds(song.duration);
+              }, 0))}`}
               color="info"
               variant="outlined"
             />
@@ -150,7 +164,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ trip, onSongsUpdated })
           Songs
         </Typography>
         <List>
-          {trip.songs.map((song) => (
+          {songs.map((song) => (
             <ListItem
               key={song.id}
               secondaryAction={
@@ -176,7 +190,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ trip, onSongsUpdated })
                 secondary={
                   <>
                     <Typography variant="body2" component="span">
-                      {song.artist} • {formatDuration(song.duration)}
+                      {song.artist} • {formatDurationFromString(song.duration)}
                     </Typography>
                     {song.metadata?.source === 'local' && (
                       <Chip
@@ -204,7 +218,7 @@ const ProjectDetails: React.FC<ProjectDetailsProps> = ({ trip, onSongsUpdated })
               />
             </ListItem>
           ))}
-          {trip.songs.length === 0 && (
+          {songs.length === 0 && (
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
               No songs added yet. Click "Add Local Files" to import songs from your computer.
             </Typography>

@@ -6,13 +6,16 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Trip } from '../types/trip';
 import { Song } from '../types/song';
-import { deleteTrip, getTrip } from '../services/firebaseService';
+import { deleteTrip } from '../services/firebaseService';
 import ProjectDetails from './ProjectDetails';
 import SongDetailsPanel from './panels/SongDetailsPanel';
 import TagsAndCategoriesPanel from './panels/TagsAndCategoriesPanel';
 import CollaboratorsPanel from './panels/CollaboratorsPanel';
 import TripActivityLogs from './TripActivityLogs';
 import { useAuth } from '../contexts/AuthContext';
+import { useTrip } from '../hooks/useTrip';
+import { useSongs } from '../hooks/useSongs';
+import { getErrorMessage } from '../utils/storageHelpers';
 
 interface TripDetailsProps {
   trip: Trip;
@@ -22,45 +25,42 @@ interface TripDetailsProps {
 const TripDetails: React.FC<TripDetailsProps> = ({ trip: initialTrip, onTripUpdated }) => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const [localTrip, setLocalTrip] = useState<Trip>(initialTrip);
   const [selectedTab, setSelectedTab] = useState(0);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  // Update local trip when props change
+  // Use hooks for data management
+  const { trip, loading: tripLoading, error: tripError, refresh: refreshTrip, updateTripData } = useTrip({
+    tripId: initialTrip.id,
+    autoFetch: true
+  });
+
+  const { songs, loading: songsLoading, error: songsError, refresh: refreshSongs, updateSongData, removeSong } = useSongs({
+    tripId: initialTrip.id,
+    autoFetch: true
+  });
+
+  // Combine loading and error states
+  const loading = tripLoading || songsLoading;
+  const combinedError = tripError || songsError;
+
   useEffect(() => {
-    setLocalTrip(initialTrip);
-  }, [initialTrip]);
+    if (combinedError) {
+      setError(getErrorMessage(combinedError, 'Failed to load project data'));
+    }
+  }, [combinedError]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setSelectedTab(newValue);
   };
 
   const handleSongsUpdated = async (updatedSongs: Song[]) => {
-    try {
-      const updatedTrip = {
-        ...localTrip,
-        songs: updatedSongs
-      };
-      
-      // Update local state immediately for responsive UI
-      setLocalTrip(updatedTrip);
-      
-      // Notify parent component
-      onTripUpdated(updatedTrip);
-      
-      // Fetch the latest trip data from Firebase to ensure we have the most up-to-date data
-      const refreshedTrip = await getTrip(initialTrip.id);
-      if (refreshedTrip) {
-        setLocalTrip(refreshedTrip);
-        onTripUpdated(refreshedTrip);
-      }
-    } catch (error) {
-      console.error('Error updating songs:', error);
-      setError('Failed to update songs. Please try again.');
+    // Songs are managed by useSongs hook, just refresh to sync
+    await refreshSongs();
+    if (trip) {
+      onTripUpdated(trip);
     }
   };
 
@@ -70,55 +70,24 @@ const TripDetails: React.FC<TripDetailsProps> = ({ trip: initialTrip, onTripUpda
 
   const handleSongUpdate = async (updatedSong: Song) => {
     try {
-      const updatedSongs = localTrip.songs.map(song => 
-        song.id === updatedSong.id ? updatedSong : song
-      );
-      
-      const updatedTrip = {
-        ...localTrip,
-        songs: updatedSongs
-      };
-      
-      // Update local state immediately for responsive UI
-      setLocalTrip(updatedTrip);
-      
-      // Notify parent component
-      onTripUpdated(updatedTrip);
-      
-      // Fetch the latest trip data from Firebase to ensure we have the most up-to-date data
-      const refreshedTrip = await getTrip(initialTrip.id);
-      if (refreshedTrip) {
-        setLocalTrip(refreshedTrip);
-        onTripUpdated(refreshedTrip);
+      await updateSongData(updatedSong.id, updatedSong);
+      await refreshSongs();
+      if (trip) {
+        onTripUpdated(trip);
       }
-    } catch (error) {
-      console.error('Error updating song:', error);
-      setError('Failed to update song. Please try again.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update song'));
     }
   };
 
   const handleCollaboratorsUpdated = async (updatedCollaborators: string[]) => {
+    if (!trip) return;
+    
     try {
-      const updatedTrip = {
-        ...localTrip,
-        collaborators: updatedCollaborators
-      };
-      
-      // Update local state immediately for responsive UI
-      setLocalTrip(updatedTrip);
-      
-      // Notify parent component
+      const updatedTrip = await updateTripData({ collaborators: updatedCollaborators });
       onTripUpdated(updatedTrip);
-      
-      // Fetch the latest trip data from Firebase to ensure we have the most up-to-date data
-      const refreshedTrip = await getTrip(initialTrip.id);
-      if (refreshedTrip) {
-        setLocalTrip(refreshedTrip);
-        onTripUpdated(refreshedTrip);
-      }
-    } catch (error) {
-      console.error('Error updating collaborators:', error);
-      setError('Failed to update collaborators. Please try again.');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update collaborators'));
     }
   };
 
@@ -148,31 +117,47 @@ const TripDetails: React.FC<TripDetailsProps> = ({ trip: initialTrip, onTripUpda
         </Tabs>
       </Box>
 
-      {selectedTab === 0 && (
-        <ProjectDetails
-          trip={localTrip}
-          onSongsUpdated={handleSongsUpdated}
-        />
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          <CircularProgress />
+        </Box>
       )}
 
-      {selectedTab === 1 && (
-        <TagsAndCategoriesPanel
-          songs={localTrip.songs}
-          onClose={() => {}}
-          onSongsUpdated={handleSongsUpdated}
-        />
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
       )}
 
-      {selectedTab === 2 && (
-        <CollaboratorsPanel
-          tripId={localTrip.id}
-          collaborators={localTrip.collaborators}
-          onCollaboratorsChange={handleCollaboratorsUpdated}
-        />
-      )}
+      {!loading && trip && (
+        <>
+          {selectedTab === 0 && (
+            <ProjectDetails
+              trip={{ ...trip, songs }}
+              onSongsUpdated={handleSongsUpdated}
+            />
+          )}
 
-      {selectedTab === 3 && (
-        <TripActivityLogs tripId={localTrip.id} />
+          {selectedTab === 1 && (
+            <TagsAndCategoriesPanel
+              songs={songs}
+              onClose={() => {}}
+              onSongsUpdated={handleSongsUpdated}
+            />
+          )}
+
+          {selectedTab === 2 && (
+            <CollaboratorsPanel
+              tripId={trip.id}
+              collaborators={trip.collaborators}
+              onCollaboratorsChange={handleCollaboratorsUpdated}
+            />
+          )}
+
+          {selectedTab === 3 && (
+            <TripActivityLogs tripId={trip.id} />
+          )}
+        </>
       )}
 
       {selectedSong && (

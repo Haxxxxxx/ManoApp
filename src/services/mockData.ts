@@ -1,4 +1,4 @@
-import { Trip, Song } from '../types';
+import { Trip, Song } from '../types/index';
 
 export const mockTrips: Trip[] = [
   {

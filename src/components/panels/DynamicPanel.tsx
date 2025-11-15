@@ -10,6 +10,7 @@ interface DynamicPanelProps {
   songs: Song[];
   selectedTrip?: string | null;
   onClose: () => void;
+  additionalProps?: Record<string, any>;
 }
 
 const DynamicPanel: React.FC<DynamicPanelProps> = ({
@@ -17,23 +18,27 @@ const DynamicPanel: React.FC<DynamicPanelProps> = ({
   tripData,
   songs,
   selectedTrip,
-  onClose
+  onClose,
+  additionalProps = {}
 }) => {
   const panelConfig = panelRegistry[panelType];
   
   if (!panelConfig) {
-    console.warn(`No panel configuration found for type: ${panelType}`);
+    // No panel configuration found
     return null;
   }
   
   // For panels that require tripData, ensure it exists
   if (panelConfig.requiresTrip && !tripData) {
-    console.warn(`Panel ${panelType} requires trip data but none was provided`);
+    // Panel requires trip data but none was provided
     return null;
   }
   
   // Get props for this panel type
   const panelProps = getPanelProps(panelType, tripData, songs, onClose, selectedTrip);
+  
+  // Merge additional props if provided
+  const finalProps = { ...panelProps, ...additionalProps };
   
   // Get the component to render
   const PanelComponent = panelConfig.component;
@@ -55,7 +60,7 @@ const DynamicPanel: React.FC<DynamicPanelProps> = ({
     >
       <DialogTitle>{panelConfig.title}</DialogTitle>
       <DialogContent>
-        <PanelComponent {...panelProps} />
+        <PanelComponent {...finalProps} />
       </DialogContent>
     </Dialog>
   );

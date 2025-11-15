@@ -27,10 +27,10 @@ export const getSoundCloudAccessToken = async (): Promise<string> => {
     const getSoundCloudToken = httpsCallable(functions as Functions, 'getSoundCloudToken');
     const result = await getSoundCloudToken({ idToken });
     
-    // @ts-ignore - The result data structure is determined by the Firebase function
-    return result.data.accessToken;
+    // Type assertion needed because Firebase Functions return type is generic
+    return (result.data as { accessToken: string }).accessToken;
   } catch (error) {
-    console.error('Error getting SoundCloud access token:', error);
+    // Error getting SoundCloud access token
     throw new Error('Failed to get SoundCloud access token');
   }
 };
@@ -60,7 +60,7 @@ export const getSoundCloudProfile = async () => {
     
     return await response.json();
   } catch (error) {
-    console.error('Error fetching SoundCloud profile:', error);
+    // Error fetching SoundCloud profile
     throw error;
   }
 };
@@ -94,10 +94,10 @@ export const publishToSoundCloud = async (trackData: {
       trackData
     });
     
-    // @ts-ignore - The result data structure is determined by the Firebase function
-    return result.data;
+    // Type assertion needed because Firebase Functions return type is generic
+    return result.data as unknown;
   } catch (error) {
-    console.error('Error publishing to SoundCloud:', error);
+    // Error publishing to SoundCloud
     throw error;
   }
 }; 

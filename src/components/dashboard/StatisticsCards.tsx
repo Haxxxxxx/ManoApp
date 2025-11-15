@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Grid,
   Paper,
   Typography,
   alpha,
-  useTheme
+  useTheme,
+  Box
 } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
@@ -25,113 +26,116 @@ const StatisticsCards: React.FC<StatisticsCardsProps> = ({
   totalCollaborators 
 }) => {
   const theme = useTheme();
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  
+  const cardData = useMemo(() => [
+    {
+      id: 'projects',
+      icon: <FolderIcon sx={{ fontSize: 40 }} />,
+      value: totalProjects,
+      label: 'Projects',
+      color: 'primary' as const,
+    },
+    {
+      id: 'songs',
+      icon: <MusicNoteIcon sx={{ fontSize: 40 }} />,
+      value: totalSongs,
+      label: 'Songs',
+      color: 'secondary' as const,
+    },
+    {
+      id: 'active',
+      icon: <TrendingUpIcon sx={{ fontSize: 40 }} />,
+      value: activeProjects,
+      label: 'Active Projects',
+      color: 'success' as const,
+    },
+    {
+      id: 'collaborators',
+      icon: <GroupAddIcon sx={{ fontSize: 40 }} />,
+      value: totalCollaborators,
+      label: 'Collaborators',
+      color: 'info' as const,
+    },
+  ], [totalProjects, totalSongs, activeProjects, totalCollaborators]);
   
   return (
     <Grid container spacing={3} sx={{ mb: 4 }}>
-      <Grid item xs={12} sm={6} md={3}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 3,
-            borderRadius: 3,
-            bgcolor: alpha(theme.palette.primary.main, 0.1),
-            border: '1px solid',
-            borderColor: alpha(theme.palette.primary.main, 0.2),
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <FolderIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-          <Typography variant="h4" fontWeight="bold" color="primary.main">
-            {totalProjects}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Projects
-          </Typography>
-        </Paper>
-      </Grid>
-      <Grid item xs={12} sm={6} md={3}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 3,
-            borderRadius: 3,
-            bgcolor: alpha(theme.palette.secondary.main, 0.1),
-            border: '1px solid',
-            borderColor: alpha(theme.palette.secondary.main, 0.2),
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <MusicNoteIcon sx={{ fontSize: 40, color: 'secondary.main', mb: 1 }} />
-          <Typography variant="h4" fontWeight="bold" color="secondary.main">
-            {totalSongs}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Songs
-          </Typography>
-        </Paper>
-      </Grid>
-      <Grid item xs={12} sm={6} md={3}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 3,
-            borderRadius: 3,
-            bgcolor: alpha(theme.palette.success.main, 0.1),
-            border: '1px solid',
-            borderColor: alpha(theme.palette.success.main, 0.2),
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <TrendingUpIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-          <Typography variant="h4" fontWeight="bold" color="success.main">
-            {activeProjects}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Active Projects
-          </Typography>
-        </Paper>
-      </Grid>
-      <Grid item xs={12} sm={6} md={3}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 3,
-            borderRadius: 3,
-            bgcolor: alpha(theme.palette.info.main, 0.1),
-            border: '1px solid',
-            borderColor: alpha(theme.palette.info.main, 0.2),
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-          }}
-        >
-          <GroupAddIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
-          <Typography variant="h4" fontWeight="bold" color="info.main">
-            {totalCollaborators}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Collaborators
-          </Typography>
-        </Paper>
-      </Grid>
+      {cardData.map((card) => {
+        const isHovered = hoveredCard === card.id;
+        const colorValue = theme.palette[card.color].main;
+        
+        return (
+          <Grid item xs={12} sm={6} md={3} key={card.id}>
+            <Paper
+              elevation={0}
+              onMouseEnter={() => setHoveredCard(card.id)}
+              onMouseLeave={() => setHoveredCard(null)}
+              sx={{
+                p: 3,
+                borderRadius: 3,
+                bgcolor: alpha(colorValue, 0.1),
+                border: '1px solid',
+                borderColor: alpha(colorValue, 0.2),
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: isHovered ? 'translateY(-4px) scale(1.02)' : 'translateY(0) scale(1)',
+                boxShadow: isHovered 
+                  ? `0px 8px 24px ${alpha(colorValue, 0.2)}`
+                  : 'none',
+                '&:hover': {
+                  bgcolor: alpha(colorValue, 0.15),
+                  borderColor: colorValue,
+                }
+              }}
+            >
+              <Box
+                sx={{
+                  mb: 1,
+                  transition: 'all 0.3s ease',
+                  transform: isHovered ? 'scale(1.1) rotate(5deg)' : 'scale(1)',
+                }}
+              >
+                {React.cloneElement(card.icon, { 
+                  sx: { 
+                    fontSize: 40, 
+                    color: colorValue,
+                    transition: 'all 0.3s ease',
+                  } 
+                })}
+              </Box>
+              <Typography 
+                variant="h4" 
+                fontWeight="bold" 
+                sx={{
+                  color: colorValue,
+                  transition: 'all 0.2s ease',
+                  transform: isHovered ? 'scale(1.05)' : 'scale(1)',
+                }}
+              >
+                {card.value}
+              </Typography>
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{
+                  mt: 0.5,
+                  transition: 'color 0.2s ease',
+                  color: isHovered ? 'text.primary' : 'text.secondary',
+                }}
+              >
+                {card.label}
+              </Typography>
+            </Paper>
+          </Grid>
+        );
+      })}
     </Grid>
   );
 };

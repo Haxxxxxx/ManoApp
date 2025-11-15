@@ -8,12 +8,13 @@ import MainContent from './components/MainContent'
 import AuthForm from './components/AuthForm'
 import ProfilePage from './components/pages/ProfilePage'
 import Sidebar from './components/Sidebar'
-import SongDetail from './pages/SongDetail'
+import SongDetail from './components/pages/SongDetail'
 import { Box } from '@mui/material'
 import { useState, useEffect } from 'react'
 import AlbumCustomizationPage from './components/pages/AlbumCustomizationPage'
 import AlbumsPage from './components/pages/AlbumsPage'
 import AlbumDetailPage from './components/pages/AlbumDetailPage'
+import ErrorBoundary from './components/common/ErrorBoundary'
 
 // Create a base theme that will be overridden by our custom theme
 const baseTheme = createTheme()
@@ -53,6 +54,7 @@ function AppContent() {
           <Route path="/" element={<MainContent selectedTrip={null} onSelectTrip={handleSelectTrip} />} />
           <Route path="/trip/:tripId" element={<MainContent selectedTrip={selectedTrip} onSelectTrip={handleSelectTrip} />} />
           <Route path="/song/:songId" element={<SongDetail />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/albums" element={<AlbumsPage />} />
           <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
           <Route path="/albums/create" element={<AlbumCustomizationPage />} />
@@ -65,22 +67,30 @@ function AppContent() {
 
 function App() {
   return (
-    <Router>
-      <MuiThemeProvider theme={baseTheme}>
-        <CssBaseline />
-        <AuthProvider>
-          <CustomThemeProvider>
-            <TripProvider>
-              <Routes>
-                <Route path="/auth" element={<AuthForm />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/*" element={<AppContent />} />
-              </Routes>
-            </TripProvider>
-          </CustomThemeProvider>
-        </AuthProvider>
-      </MuiThemeProvider>
-    </Router>
+    <ErrorBoundary>
+      <Router
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        <MuiThemeProvider theme={baseTheme}>
+          <CssBaseline />
+          <AuthProvider>
+            <CustomThemeProvider>
+              <TripProvider>
+                <ErrorBoundary>
+                  <Routes>
+                    <Route path="/auth" element={<AuthForm />} />
+                    <Route path="/*" element={<AppContent />} />
+                  </Routes>
+                </ErrorBoundary>
+              </TripProvider>
+            </CustomThemeProvider>
+          </AuthProvider>
+        </MuiThemeProvider>
+      </Router>
+    </ErrorBoundary>
   )
 }
 

@@ -22,6 +22,4 @@ const adminDb = getFirestore(adminApp);
 const adminAuth = getAuth(adminApp);
 const adminFunctions = getFunctions(adminApp);
 
-console.log('Firebase Admin services initialized successfully');
-
 export { adminApp, adminStorage, adminDb, adminAuth, adminFunctions }; 

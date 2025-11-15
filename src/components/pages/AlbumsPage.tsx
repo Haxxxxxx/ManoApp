@@ -16,8 +16,13 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Divider
+  Divider,
+  Tooltip,
+  alpha,
+  useTheme
 } from '@mui/material';
+import EmptyState from '../common/EmptyState';
+import SkeletonLoader from '../common/SkeletonLoader';
 import { 
   Add as AddIcon, 
   Edit as EditIcon, 
@@ -25,16 +30,22 @@ import {
   Album as AlbumIcon,
   MusicNote as MusicNoteIcon,
   CalendarToday as CalendarIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Visibility as VisibilityIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAlbums, deleteAlbum } from '../../services/firebaseService';
 import { Album } from '../../types/album';
+import { formatDate } from '../../utils/formatters';
+import { createDevPlaceholderAlbum, isDevPlaceholderAlbum } from '../../utils/devPlaceholder';
+import { useMemo } from 'react';
 
 const AlbumsPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const theme = useTheme();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,16 +54,23 @@ const AlbumsPage = () => {
 
   useEffect(() => {
     const fetchAlbums = async () => {
-      if (!currentUser) return;
+      if (!currentUser) {
+        setLoading(false);
+        setAlbums([]);
+        return;
+      }
       
       try {
         setLoading(true);
         setError(null);
         const userAlbums = await getAlbums(currentUser.uid);
-        setAlbums(userAlbums);
+        // Ensure we always have an array
+        const albumsArray = Array.isArray(userAlbums) ? userAlbums : [];
+        setAlbums(albumsArray);
       } catch (err) {
-        console.error('Error fetching albums:', err);
+        // Error fetching albums
         setError('Failed to load albums. Please try again.');
+        setAlbums([]);
       } finally {
         setLoading(false);
       }
@@ -73,7 +91,20 @@ const AlbumsPage = () => {
     navigate(`/albums/${albumId}`);
   };
 
+  // Add dev placeholder album in development mode
+  const displayAlbums = useMemo(() => {
+    const allAlbums = [...albums];
+    if (import.meta.env.DEV && albums.length === 0) {
+      allAlbums.push(createDevPlaceholderAlbum());
+    }
+    return allAlbums;
+  }, [albums]);
+
   const handleDeleteClick = (album: Album) => {
+    // Prevent deletion of dev placeholder
+    if (import.meta.env.DEV && isDevPlaceholderAlbum(album)) {
+      return;
+    }
     setAlbumToDelete(album);
     setDeleteDialogOpen(true);
   };
@@ -88,7 +119,7 @@ const AlbumsPage = () => {
       setDeleteDialogOpen(false);
       setAlbumToDelete(null);
     } catch (err) {
-      console.error('Error deleting album:', err);
+      // Error deleting album
       setError('Failed to delete album. Please try again.');
     } finally {
       setLoading(false);
@@ -100,89 +131,128 @@ const AlbumsPage = () => {
     setAlbumToDelete(null);
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'No date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
+  // Use centralized formatDate from utils/formatters
 
   return (
     <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" fontWeight="bold">
+        <Typography 
+          variant="h4" 
+          fontWeight="bold"
+          sx={{
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
           My Albums
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleCreateAlbum}
+          sx={{
+            borderRadius: 2,
+            px: 3,
+            py: 1.5,
+            boxShadow: `0px 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
+            transition: 'all 0.2s ease',
+            '&:hover': {
+              boxShadow: `0px 6px 16px ${alpha(theme.palette.primary.main, 0.3)}`,
+              transform: 'translateY(-2px)',
+            },
+            '&:active': {
+              transform: 'translateY(0)',
+            }
+          }}
         >
           Create Album
         </Button>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : albums.length === 0 ? (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          p: 6,
-          bgcolor: 'background.paper',
-          borderRadius: 2,
-          boxShadow: 1
-        }}>
-          <AlbumIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No Albums Yet
-          </Typography>
-          <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 3 }}>
-            Create your first album to start organizing your music.
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleCreateAlbum}
-          >
-            Create Album
-          </Button>
-        </Box>
+        <SkeletonLoader variant="card" count={6} />
+      ) : displayAlbums.length === 0 ? (
+        <EmptyState
+          icon={<AlbumIcon sx={{ fontSize: 80, color: 'primary.main' }} />}
+          title="No Albums Yet"
+          description="Create your first album to start organizing your music. Albums help you group related songs together and prepare them for release."
+          actionLabel="Create Album"
+          onAction={handleCreateAlbum}
+          sx={{ my: 6 }}
+        />
       ) : (
         <Grid container spacing={3}>
-          {albums.map((album) => (
+          {displayAlbums.map((album) => {
+            const isDev = import.meta.env.DEV && isDevPlaceholderAlbum(album);
+            return (
             <Grid item xs={12} sm={6} md={4} key={album.id}>
               <Card 
                 sx={{ 
                   height: '100%', 
                   display: 'flex', 
                   flexDirection: 'column',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  borderRadius: 3,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  '&::before': {
+                    content: '""',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: '4px',
+                    background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                    opacity: 0,
+                    transition: 'opacity 0.3s ease',
+                  },
                   '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 6
+                    transform: 'translateY(-8px) scale(1.02)',
+                    boxShadow: `0px 12px 24px ${alpha(theme.palette.common.black, 0.15)}`,
+                    borderColor: theme.palette.primary.main,
+                    '&::before': {
+                      opacity: 1,
+                    }
                   }
                 }}
+                onClick={() => handleViewAlbum(album.id)}
               >
+                {isDev && (
+                  <Chip
+                    label="🧪 DEV"
+                    size="small"
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      zIndex: 2,
+                      bgcolor: 'error.main',
+                      color: 'white',
+                      fontSize: '0.65rem',
+                      height: 20,
+                      fontWeight: 'bold',
+                      border: '1px solid white',
+                      boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.2)',
+                    }}
+                  />
+                )}
                 <CardMedia
                   component="img"
                   height="200"
                   image={album.coverImage || '/placeholder-album.jpg'}
                   alt={album.title}
-                  sx={{ objectFit: 'cover' }}
+                  sx={{ objectFit: 'cover', position: 'relative' }}
                 />
                 <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                   <Typography variant="h6" gutterBottom noWrap>
@@ -195,7 +265,7 @@ const AlbumsPage = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                     <CalendarIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
                     <Typography variant="body2" color="text.secondary">
-                      {formatDate(album.releaseDate)}
+                      {album.releaseDate ? formatDate(album.releaseDate) : 'No date'}
                     </Typography>
                   </Box>
                   
@@ -219,34 +289,65 @@ const AlbumsPage = () => {
                   
                   <Box sx={{ mt: 'auto', pt: 2 }}>
                     <Divider sx={{ mb: 2 }} />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Button 
-                        size="small" 
-                        onClick={() => handleViewAlbum(album.id)}
-                      >
-                        View
-                      </Button>
-                      <Box>
-                        <IconButton 
-                          size="small" 
-                          onClick={() => handleEditAlbum(album.id)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton 
-                          size="small" 
-                          color="error"
-                          onClick={() => handleDeleteClick(album)}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
+                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                      {!isDev && (
+                        <>
+                          <Tooltip title="Edit Album" arrow>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<EditIcon />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditAlbum(album.id);
+                              }}
+                              sx={{
+                                borderRadius: 2,
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                transition: 'all 0.2s ease',
+                                '&:hover': {
+                                  transform: 'translateY(-2px)',
+                                  boxShadow: 2,
+                                }
+                              }}
+                            >
+                              Edit
+                            </Button>
+                          </Tooltip>
+                          <Tooltip title="Delete Album" arrow>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              startIcon={<DeleteIcon />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteClick(album);
+                              }}
+                              sx={{
+                                borderRadius: 2,
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                transition: 'all 0.2s ease',
+                                '&:hover': {
+                                  transform: 'translateY(-2px)',
+                                  boxShadow: 2,
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          </Tooltip>
+                        </>
+                      )}
                     </Box>
                   </Box>
                 </CardContent>
               </Card>
             </Grid>
-          ))}
+            );
+          })}
         </Grid>
       )}
 

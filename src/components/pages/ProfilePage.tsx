@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Container,
   Paper,
   Typography,
   TextField,
@@ -20,7 +19,6 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { ArtistProfile } from '../../types/artist';
 import { getUserProfile, updateUserProfile } from '../../services/firebaseService';
-import { useNavigate } from 'react-router-dom';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -32,7 +30,6 @@ import YouTubeIcon from '@mui/icons-material/YouTube';
 import TwitterIcon from '@mui/icons-material/Twitter';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import LinkIcon from '@mui/icons-material/Link';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 // Map of platform names to their corresponding icon components
 const platformIcons: { [key: string]: React.ComponentType<SvgIconProps> } = {
@@ -50,7 +47,6 @@ const platformIcons: { [key: string]: React.ComponentType<SvgIconProps> } = {
 const ProfilePage: React.FC = () => {
   const theme = useTheme();
   const { currentUser, updateProfile } = useAuth();
-  const navigate = useNavigate();
   const [profile, setProfile] = useState<ArtistProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -64,7 +60,7 @@ const ProfilePage: React.FC = () => {
         const userProfile = await getUserProfile(currentUser.uid);
         setProfile(userProfile);
       } catch (err) {
-        console.error('Error fetching profile:', err);
+        // Error fetching profile
         setError('Failed to load profile');
       } finally {
         setLoading(false);
@@ -98,7 +94,7 @@ const ProfilePage: React.FC = () => {
       setSuccess('Profile updated successfully');
       setIsEditing(false);
     } catch (err) {
-      console.error('Error updating profile:', err);
+      // Error updating profile
       setError('Failed to update profile');
     } finally {
       setLoading(false);
@@ -130,41 +126,43 @@ const ProfilePage: React.FC = () => {
 
   if (!profile) {
     return (
-      <Container>
+      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
         <Alert severity="error">Failed to load profile</Alert>
-      </Container>
+      </Box>
     );
   }
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      <Paper elevation={0} sx={{ p: 4, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-        {/* Header */}
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-          <Box display="flex" alignItems="center">
-            <IconButton 
-              onClick={() => navigate('/')}
-              sx={{ mr: 2 }}
-              color="primary"
-            >
-              <ArrowBackIcon />
-            </IconButton>
+    <Box sx={{ height: '100%', overflow: 'auto', bgcolor: 'background.default', display: 'flex', justifyContent: 'center' }}>
+      <Box sx={{ width: '100%', maxWidth: '900px', p: 2 }}>
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            p: 3, 
+            borderRadius: 3, 
+            border: '1px solid', 
+            borderColor: 'divider',
+            bgcolor: 'background.paper'
+          }}
+        >
+          {/* Header */}
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
             <Typography variant="h4" fontWeight="bold">Profile Settings</Typography>
+            <IconButton 
+              onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+              color={isEditing ? "primary" : "default"}
+              aria-label={isEditing ? "Save changes" : "Edit profile"}
+            >
+              {isEditing ? <SaveIcon /> : <EditIcon />}
+            </IconButton>
           </Box>
-          <IconButton 
-            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-            color={isEditing ? "primary" : "default"}
-          >
-            {isEditing ? <SaveIcon /> : <EditIcon />}
-          </IconButton>
-        </Box>
 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
 
         {/* Basic Info */}
-        <Box mb={4}>
-          <Grid container spacing={3} alignItems="center">
+        <Box mb={3}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item>
               <Avatar
                 src={profile.photoURL || undefined}
@@ -190,7 +188,7 @@ const ProfilePage: React.FC = () => {
           </Grid>
         </Box>
 
-        <Divider sx={{ my: 4 }} />
+        <Divider sx={{ my: 3 }} />
 
         {/* Bio and Location */}
         <Box>
@@ -241,7 +239,7 @@ const ProfilePage: React.FC = () => {
           </Grid>
         </Box>
 
-        <Divider sx={{ my: 4 }} />
+        <Divider sx={{ my: 3 }} />
 
         {/* Social Links */}
         <Box>
@@ -269,7 +267,7 @@ const ProfilePage: React.FC = () => {
         </Box>
 
         {/* Save Button (for mobile) */}
-        <Box mt={4} display={{ xs: 'block', sm: 'none' }}>
+        <Box mt={3} display={{ xs: 'block', sm: 'none' }}>
           <Button
             fullWidth
             variant="contained"
@@ -281,8 +279,9 @@ const ProfilePage: React.FC = () => {
             Save Changes
           </Button>
         </Box>
-      </Paper>
-    </Container>
+        </Paper>
+      </Box>
+    </Box>
   );
 };
 

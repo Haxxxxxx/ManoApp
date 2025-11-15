@@ -2,6 +2,7 @@ import { Box, Typography, Paper, TextField, Chip, IconButton, Button, Dialog, Di
 import { useState, useEffect } from 'react';
 import { Song } from '../../types';
 import { updateSong } from '../../services/firebaseService';
+import { getErrorMessage } from '../../utils/storageHelpers';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 
@@ -112,7 +113,7 @@ const TagsAndCategoriesPanel = ({ songs, onClose, onSongsUpdated }: TagsAndCateg
         onSongsUpdated(updatedSongs);
       }
     } catch (error) {
-      console.error('Error adding tag:', error);
+      // Error adding tag
       
       // Revert local state if Firebase update fails
       setLocalSongs(songs);
@@ -174,7 +175,7 @@ const TagsAndCategoriesPanel = ({ songs, onClose, onSongsUpdated }: TagsAndCateg
         onSongsUpdated(updatedSongs);
       }
     } catch (error) {
-      console.error('Error removing tag:', error);
+      // Error removing tag
       
       // Revert local state if Firebase update fails
       setLocalSongs(songs);
@@ -231,7 +232,7 @@ const TagsAndCategoriesPanel = ({ songs, onClose, onSongsUpdated }: TagsAndCateg
         onSongsUpdated(updatedSongs);
       }
     } catch (error) {
-      console.error('Error adding tag to all songs:', error);
+      // Error adding tag to all songs
       
       // Revert local state if Firebase update fails
       setLocalSongs(songs);

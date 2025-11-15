@@ -36,14 +36,18 @@ import {
   VolumeUp as VolumeUpIcon,
   Share as ShareIcon,
   Download as DownloadIcon,
-  PhotoCamera as PhotoCameraIcon
+  PhotoCamera as PhotoCameraIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
+import { Tooltip } from '@mui/material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAlbum, deleteAlbum, updateAlbum } from '../../services/firebaseService';
 import { uploadCoverArt } from '../../services/storageService';
 import { Album } from '../../types/album';
 import { exportAlbum } from '../../services/exportService';
+import { formatDuration, formatDate } from '../../utils/formatters';
+import { createDevPlaceholderAlbum, isDevPlaceholderAlbum } from '../../utils/devPlaceholder';
 
 const AlbumDetailPage = () => {
   const theme = useTheme();
@@ -61,32 +65,56 @@ const AlbumDetailPage = () => {
   const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchAlbum = async () => {
-      if (!albumId || !currentUser) return;
+      if (!albumId) return;
+      
+      // Check if this is a dev placeholder album
+      if (import.meta.env.DEV && albumId === 'dev-placeholder-album') {
+        const devAlbum = createDevPlaceholderAlbum();
+        if (!cancelled) {
+          setAlbum(devAlbum);
+          setLoading(false);
+        }
+        return;
+      }
+      
+      if (!currentUser) return;
       
       try {
         setLoading(true);
         setError(null);
         const albumData = await getAlbum(albumId);
         
-        // Check if the album belongs to the current user
-        if (albumData && albumData.userId !== currentUser.uid) {
-          setError('You do not have permission to view this album.');
-          return;
-        }
-        
-        if (albumData) {
-          setAlbum(albumData);
+        if (!cancelled) {
+          // Check if the album belongs to the current user
+          if (albumData && albumData.userId !== currentUser.uid) {
+            setError('You do not have permission to view this album.');
+            return;
+          }
+          
+          if (albumData) {
+            setAlbum(albumData);
+          }
         }
       } catch (err) {
-        console.error('Error fetching album:', err);
-        setError('Failed to load album. Please try again.');
+        if (!cancelled) {
+          // Error fetching album
+          setError('Failed to load album. Please try again.');
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchAlbum();
+
+    return () => {
+      cancelled = true;
+    };
   }, [albumId, currentUser]);
 
   // Handle audio element setup and cleanup
@@ -98,7 +126,7 @@ const AlbumDetailPage = () => {
     const filePath = currentSong?.metadata?.filePath || currentSong?.filePath;
     
     if (!filePath) {
-      console.warn('No file path found for song:', currentSong);
+      // No file path available for this song
       return;
     }
 
@@ -115,7 +143,7 @@ const AlbumDetailPage = () => {
     };
 
     const handleError = (e: ErrorEvent) => {
-      console.error('Error playing audio:', e);
+      // Error playing audio
       setError('Failed to play the audio file. Please check if the file exists.');
     };
 
@@ -137,7 +165,7 @@ const AlbumDetailPage = () => {
 
     if (isPlaying) {
       audioRef.current.play().catch(err => {
-        console.error('Error playing audio:', err);
+        // Error playing audio
         setError('Failed to play the audio file. Please check if the file exists.');
         setIsPlaying(false);
       });
@@ -153,18 +181,30 @@ const AlbumDetailPage = () => {
   };
 
   const handleDeleteClick = () => {
+    // Prevent deletion of dev placeholder
+    if (import.meta.env.DEV && album && isDevPlaceholderAlbum(album)) {
+      setError('Cannot delete dev placeholder album');
+      return;
+    }
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!albumId) return;
+    if (!albumId || !album) return;
+    
+    // Prevent deletion of dev placeholder
+    if (import.meta.env.DEV && isDevPlaceholderAlbum(album)) {
+      setError('Cannot delete dev placeholder album');
+      setDeleteDialogOpen(false);
+      return;
+    }
     
     try {
       setLoading(true);
       await deleteAlbum(albumId);
       navigate('/albums');
     } catch (err) {
-      console.error('Error deleting album:', err);
+      // Error deleting album
       setError('Failed to delete album. Please try again.');
       setLoading(false);
     }
@@ -219,25 +259,18 @@ const AlbumDetailPage = () => {
     setIsPlaying(true);
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'No date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
+  // Use centralized formatDate from utils/formatters
 
-  const formatDuration = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
 
   const handleCoverUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !albumId) return;
+
+    // Prevent cover upload for dev placeholder
+    if (import.meta.env.DEV && albumId === 'dev-placeholder-album') {
+      setError('Cannot upload cover for dev placeholder album. This is a test album.');
+      return;
+    }
 
     try {
       setUploadingCover(true);
@@ -255,7 +288,7 @@ const AlbumDetailPage = () => {
       // Update local state
       setAlbum(updatedAlbum);
     } catch (err) {
-      console.error('Error uploading cover:', err);
+      // Error uploading cover
       setError('Failed to upload cover image. Please try again.');
     } finally {
       setUploadingCover(false);
@@ -265,12 +298,15 @@ const AlbumDetailPage = () => {
   const handleExport = async () => {
     if (!album) return;
     
+    // Allow export of dev placeholder for testing
+    // The export service will handle it appropriately
+    
     try {
       setIsExporting(true);
       setError(null);
       await exportAlbum(album);
     } catch (err) {
-      console.error('Error exporting album:', err);
+      // Error exporting album
       setError('Failed to export album. Please try again.');
     } finally {
       setIsExporting(false);
@@ -318,12 +354,48 @@ const AlbumDetailPage = () => {
   return (
     <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
       <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate('/albums')} sx={{ color: 'text.secondary' }}>
-          <AlbumIcon />
-        </IconButton>
-        <Typography variant="h4" fontWeight="bold">
+        <Tooltip title="Back to Albums" arrow>
+          <IconButton 
+            onClick={() => navigate('/albums')} 
+            sx={{ 
+              color: 'text.secondary',
+              borderRadius: 2,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: 'primary.main',
+                transform: 'translateX(-4px)',
+              }
+            }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        </Tooltip>
+        <Typography 
+          variant="h4" 
+          fontWeight="bold"
+          sx={{
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            flex: 1,
+          }}
+        >
           {album.title}
         </Typography>
+        {import.meta.env.DEV && isDevPlaceholderAlbum(album) && (
+          <Chip
+            label="🧪 DEV PLACEHOLDER"
+            size="small"
+            sx={{
+              bgcolor: 'error.main',
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '0.7rem',
+            }}
+          />
+        )}
       </Box>
 
       <Grid container spacing={4}>
@@ -376,7 +448,7 @@ const AlbumDetailPage = () => {
                 <label htmlFor="cover-upload">
                   <IconButton
                     component="span"
-                    disabled={uploadingCover}
+                    disabled={uploadingCover || (import.meta.env.DEV && albumId === 'dev-placeholder-album')}
                     sx={{ color: 'white' }}
                   >
                     {uploadingCover ? (
@@ -399,7 +471,7 @@ const AlbumDetailPage = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <CalendarIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                {formatDate(album.releaseDate)}
+                {album.releaseDate ? formatDate(album.releaseDate) : 'No date'}
               </Typography>
             </Box>
             
@@ -429,12 +501,25 @@ const AlbumDetailPage = () => {
               ))}
             </Box>
             
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
               <Button 
                 variant="contained" 
                 startIcon={<EditIcon />}
                 onClick={handleEditAlbum}
-                sx={{ flex: 1 }}
+                sx={{ 
+                  flex: 1,
+                  minWidth: 140,
+                  borderRadius: 2,
+                  py: 1.5,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  boxShadow: `0px 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    boxShadow: `0px 6px 16px ${alpha(theme.palette.primary.main, 0.3)}`,
+                    transform: 'translateY(-2px)',
+                  }
+                }}
               >
                 Edit Album
               </Button>
@@ -443,16 +528,46 @@ const AlbumDetailPage = () => {
                 startIcon={isExporting ? <CircularProgress size={20} /> : <DownloadIcon />}
                 onClick={handleExport}
                 disabled={isExporting || album.selectedPlatforms.length === 0}
-                sx={{ flex: 1 }}
+                sx={{ 
+                  flex: 1,
+                  minWidth: 140,
+                  borderRadius: 2,
+                  py: 1.5,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: 2,
+                  }
+                }}
               >
                 {isExporting ? 'Exporting...' : 'Export Album'}
               </Button>
-              <IconButton 
-                color="error"
-                onClick={handleDeleteClick}
-              >
-                <DeleteIcon />
-              </IconButton>
+              {!(import.meta.env.DEV && album && isDevPlaceholderAlbum(album)) && (
+                <Tooltip title="Delete Album" arrow>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={handleDeleteClick}
+                    sx={{
+                      borderRadius: 2,
+                      py: 1.5,
+                      px: 2,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: 2,
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </Tooltip>
+              )}
             </Box>
           </Paper>
         </Grid>

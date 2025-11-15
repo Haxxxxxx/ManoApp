@@ -2,6 +2,7 @@ import { Box, Typography, Paper, TextField, Button, FormControlLabel, Switch, Ci
 import { useState } from 'react';
 import { Song } from '../../types';
 import { publishToSoundCloud } from '../../services/soundcloudService';
+import { getErrorMessage } from '../../utils/storageHelpers';
 
 interface SoundCloudPublishPanelProps {
   song: Song;
@@ -42,8 +43,7 @@ const SoundCloudPublishPanel = ({ song, onClose }: SoundCloudPublishPanelProps) 
       await publishToSoundCloud(trackData);
       setSuccess(true);
     } catch (error) {
-      console.error('Error publishing to SoundCloud:', error);
-      setError(error instanceof Error ? error.message : 'Failed to publish to SoundCloud');
+      setError(getErrorMessage(error, 'Failed to publish to SoundCloud'));
     } finally {
       setPublishing(false);
     }

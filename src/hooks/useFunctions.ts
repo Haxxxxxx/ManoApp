@@ -12,7 +12,7 @@ interface FunctionsState {
 }
 
 interface FunctionsActions {
-  callFunction: <T = any, R = any>(name: string, data?: T) => Promise<R>;
+  callFunction: <T = unknown, R = unknown>(name: string, data?: T) => Promise<R>;
 }
 
 /**
@@ -31,7 +31,7 @@ export function useFunctions(): FunctionsState & FunctionsActions {
    * @param data - Optional data to pass to the function
    * @returns Promise resolving to the function result
    */
-  const callFunction = useCallback(async <T = any, R = any>(
+  const callFunction = useCallback(async <T = unknown, R = unknown>(
     name: string,
     data?: T
   ): Promise<R> => {

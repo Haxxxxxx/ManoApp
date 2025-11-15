@@ -51,18 +51,23 @@ import {
   Cloud as CloudIcon,
   Storage as StorageIcon,
   Close as CloseIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTrips } from '../../contexts/TripContext';
 import { Song } from '../../types/song';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
-import { getUserSongs } from '../../services/firebaseService';
+import { getUserSongs, getSongs } from '../../services/firebaseService';
 import { createAlbum, getAlbum, updateAlbum, deleteAlbum } from '../../services/firebaseService';
-import type { Album, AlbumSong } from '../../services/firebaseService';
+import type { Album, AlbumSong } from '../../types/album';
 import { debounce } from 'lodash';
-import { formatDuration } from '../../utils/formatters';
+import { formatDuration, parseDurationToSeconds } from '../../utils/formatters';
+import { STORAGE_KEYS, storageHelpers } from '../../utils/storageHelpers';
+import { validateTitle, validateArtist, validateGenre, validateDescription } from '../../utils/validation';
+import { FORM_LIMITS } from '../../utils/constants';
+import { createDevPlaceholderAlbum, isDevPlaceholderAlbum } from '../../utils/devPlaceholder';
 
 type SongSource = 'local' | 'project' | 'firebase';
 
@@ -89,10 +94,6 @@ const platforms = [
   { id: 'amazon', name: 'Amazon Music', color: '#00A8E1' },
   { id: 'youtube', name: 'YouTube Music', color: '#FF0000' },
 ];
-
-const TITLE_MAX_LENGTH = 100;
-const DESCRIPTION_MAX_LENGTH = 500;
-const GENRE_MAX_LENGTH = 50;
 
 interface FieldError {
   error: boolean;
@@ -143,16 +144,20 @@ const AlbumCustomizationPage = () => {
 
   // Load all available songs from different sources
   useEffect(() => {
+    let cancelled = false;
+
     const loadAllSongs = async () => {
+      if (!cancelled) {
       setIsLoading(true);
       setError(null);
+      }
       try {
         const allSongs: ExtendedSong[] = [];
 
         // 1. Load songs from local storage
-        const savedLocalFiles = localStorage.getItem('localFiles');
+        const savedLocalFiles = storageHelpers.getItem<Song[]>(STORAGE_KEYS.LOCAL_FILES);
         if (savedLocalFiles) {
-          const localSongs = JSON.parse(savedLocalFiles);
+          const localSongs = savedLocalFiles;
           allSongs.push(...localSongs.map((song: Song) => ({
             ...song,
             metadata: {
@@ -162,22 +167,36 @@ const AlbumCustomizationPage = () => {
           })));
         }
 
-        // 2. Load songs from trips/projects
-        trips.forEach(trip => {
-          if (trip.songs) {
-            allSongs.push(...trip.songs.map(song => ({
+        // 2. Load songs from trips/projects - fetch from songs collection (source of truth)
+        // Use Promise.allSettled for parallel fetching with error handling
+        if (trips.length > 0 && !cancelled) {
+          const songPromises = trips.map(async (trip) => {
+            try {
+              const projectSongs = await getSongs(trip.id);
+              return projectSongs.map(song => ({
               ...song,
               metadata: {
                 ...song.metadata,
                 source: 'project' as SongSource,
                 projectName: trip.name
               }
-            })));
+              }));
+            } catch (error) {
+              // Silently skip trips that fail to load songs
+              return [];
+            }
+          });
+          
+          const results = await Promise.allSettled(songPromises);
+          results.forEach(result => {
+            if (result.status === 'fulfilled') {
+              allSongs.push(...result.value);
           }
         });
+        }
 
         // 3. Load songs from Firebase
-        if (currentUser) {
+        if (currentUser && !cancelled) {
           try {
             const firebaseSongs = await getUserSongs(currentUser.uid);
             allSongs.push(...firebaseSongs.map(song => ({
@@ -188,34 +207,39 @@ const AlbumCustomizationPage = () => {
               }
             })));
           } catch (error) {
-            console.error('Error loading Firebase songs:', error);
+            // Error loading Firebase songs - silently skip
           }
         }
 
+        if (!cancelled) {
         setAvailableSongs(allSongs);
+        }
       } catch (error) {
-        console.error('Error loading songs:', error);
+        if (!cancelled) {
+          // Error loading songs
         setError('Failed to load songs. Please try again.');
+        }
       } finally {
+        if (!cancelled) {
         setIsLoading(false);
+        }
       }
     };
 
     loadAllSongs();
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser, trips]);
 
   // Load draft from localStorage on mount
   useEffect(() => {
     if (!albumId) {
-      const savedDraft = localStorage.getItem('albumDraft');
+      const savedDraft = storageHelpers.getItem<{ albumData: typeof albumData; selectedSongs: typeof selectedSongs }>(STORAGE_KEYS.ALBUM_DRAFT);
       if (savedDraft) {
-        try {
-          const draft = JSON.parse(savedDraft);
-          setAlbumData(draft.albumData);
-          setSelectedSongs(draft.selectedSongs);
-        } catch (err) {
-          console.error('Error loading draft:', err);
-        }
+        setAlbumData(savedDraft.albumData);
+        setSelectedSongs(savedDraft.selectedSongs);
       }
     }
   }, [albumId]);
@@ -224,10 +248,10 @@ const AlbumCustomizationPage = () => {
   const saveToLocalStorage = useCallback(
     debounce((data: { albumData: typeof albumData; selectedSongs: typeof selectedSongs }) => {
       try {
-        localStorage.setItem('albumDraft', JSON.stringify(data));
+        storageHelpers.setItem(STORAGE_KEYS.ALBUM_DRAFT, data);
         setSaveStatus('saved');
       } catch (err) {
-        console.error('Error saving draft:', err);
+        // Error saving draft
         setSaveStatus('error');
       }
     }, 1000),
@@ -249,7 +273,32 @@ const AlbumCustomizationPage = () => {
   // Add this effect to load existing album data when editing
   useEffect(() => {
     const loadAlbumData = async () => {
-      if (!albumId || !currentUser) return;
+      if (!albumId) return;
+      
+      // Check if this is a dev placeholder album
+      if (import.meta.env.DEV && albumId === 'dev-placeholder-album') {
+        const devAlbum = createDevPlaceholderAlbum();
+        setAlbum(devAlbum);
+        setAlbumData({
+          title: devAlbum.title,
+          artist: devAlbum.artist,
+          releaseDate: devAlbum.releaseDate,
+          genre: devAlbum.genre,
+          description: devAlbum.description,
+          coverImage: devAlbum.coverImage,
+          selectedPlatforms: devAlbum.selectedPlatforms || [],
+        });
+        setSelectedSongs(devAlbum.songs.map(song => ({
+          ...song,
+          duration: typeof song.duration === 'number' ? 
+            formatDuration(song.duration) : 
+            song.duration
+        })));
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!currentUser) return;
       
       try {
         setIsLoading(true);
@@ -286,7 +335,7 @@ const AlbumCustomizationPage = () => {
         })));
         
       } catch (error) {
-        console.error('Error loading album:', error);
+        // Error loading album
         setError('Failed to load album data. Please try again.');
       } finally {
         setIsLoading(false);
@@ -337,7 +386,7 @@ const AlbumCustomizationPage = () => {
       .map(song => ({
         ...song,
         duration: typeof song.duration === 'string' ? 
-          parseInt(song.duration.split(':')[0]) * 60 + parseInt(song.duration.split(':')[1]) : 
+          parseDurationToSeconds(song.duration) : 
           song.duration
       }));
     
@@ -381,30 +430,16 @@ const AlbumCustomizationPage = () => {
   const validateField = (field: keyof FormErrors, value: string) => {
     switch (field) {
       case 'title':
-        if (!value.trim()) {
-          return { error: true, message: 'Title is required' };
-        }
-        if (value.length > TITLE_MAX_LENGTH) {
-          return { error: true, message: `Title must be ${TITLE_MAX_LENGTH} characters or less` };
-        }
-        break;
+        return validateTitle(value);
       case 'artist':
-        if (!value.trim()) {
-          return { error: true, message: 'Artist name is required' };
-        }
-        break;
+        return validateArtist(value);
       case 'genre':
-        if (value.length > GENRE_MAX_LENGTH) {
-          return { error: true, message: `Genre must be ${GENRE_MAX_LENGTH} characters or less` };
-        }
-        break;
+        return validateGenre(value);
       case 'description':
-        if (value.length > DESCRIPTION_MAX_LENGTH) {
-          return { error: true, message: `Description must be ${DESCRIPTION_MAX_LENGTH} characters or less` };
-        }
-        break;
-    }
+        return validateDescription(value);
+      default:
     return { error: false, message: '' };
+    }
   };
 
   const handleFieldChange = (field: keyof typeof albumData, value: string) => {
@@ -438,6 +473,12 @@ const AlbumCustomizationPage = () => {
       return;
     }
 
+    // Prevent saving dev placeholder album
+    if (import.meta.env.DEV && albumId === 'dev-placeholder-album') {
+      setError('Cannot save dev placeholder album. This is a test album for development only.');
+      return;
+    }
+
     if (!currentUser) return;
 
     try {
@@ -457,9 +498,7 @@ const AlbumCustomizationPage = () => {
           id: song.id,
           title: song.title,
           artist: song.artist,
-          duration: typeof song.duration === 'string' ? 
-            parseInt(song.duration.split(':')[0]) * 60 + parseInt(song.duration.split(':')[1]) : 
-            Number(song.duration),
+          duration: parseDurationToSeconds(song.duration),
           metadata: {
             ...song.metadata,
             source: mapSourceType(song.metadata?.source)
@@ -475,12 +514,12 @@ const AlbumCustomizationPage = () => {
       }
 
       if (!albumId) {
-        localStorage.removeItem('albumDraft');
+        storageHelpers.removeItem(STORAGE_KEYS.ALBUM_DRAFT);
       }
 
       navigate('/albums');
     } catch (err) {
-      console.error('Error saving album:', err);
+      // Error saving album
       setError('Failed to save album. Please try again.');
     } finally {
       setIsLoading(false);
@@ -497,21 +536,67 @@ const AlbumCustomizationPage = () => {
   return (
     <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
       <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate(-1)} sx={{ color: 'text.secondary' }}>
-          <AlbumIcon />
+        <Tooltip title={albumId ? 'Back to Album' : 'Back to Albums'} arrow>
+          <IconButton 
+            onClick={() => albumId ? navigate(`/albums/${albumId}`) : navigate('/albums')} 
+            sx={{ 
+              color: 'text.secondary',
+              borderRadius: 2,
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                bgcolor: alpha(theme.palette.primary.main, 0.1),
+                color: 'primary.main',
+                transform: 'translateX(-4px)',
+              }
+            }}
+          >
+            <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h4" fontWeight="bold">
+        </Tooltip>
+        <Typography 
+          variant="h4" 
+          fontWeight="bold"
+          sx={{
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            flex: 1,
+          }}
+        >
           {albumId ? 'Edit Album' : 'Create Album'}
         </Typography>
+        {import.meta.env.DEV && albumId === 'dev-placeholder-album' && (
+          <Chip
+            label="🧪 DEV PLACEHOLDER"
+            size="small"
+            sx={{
+              bgcolor: 'error.main',
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '0.7rem',
+            }}
+          />
+        )}
       </Box>
 
       {isLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
           <CircularProgress />
         </Box>
-      ) : error ? (
-        <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
       ) : (
+        <>
+          {import.meta.env.DEV && albumId === 'dev-placeholder-album' && (
+            <Alert severity="info" sx={{ mb: 3 }}>
+              This is a development placeholder album for testing. You can edit and preview it, but changes cannot be saved. Use this to test all album features without creating real albums.
+            </Alert>
+          )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>
+          )}
+        </>
+      )}
+      {!isLoading && (
         <>
           {/* Songs Selection Section */}
           <Paper elevation={0} sx={{ p: 3, borderRadius: 2, mb: 4 }}>
@@ -627,7 +712,7 @@ const AlbumCustomizationPage = () => {
                   error={formErrors.title.error}
                   helperText={
                     formErrors.title.error ? formErrors.title.message :
-                    `${albumData.title.length}/${TITLE_MAX_LENGTH} characters`
+                    `${albumData.title.length}/${FORM_LIMITS.TITLE_MAX_LENGTH} characters`
                   }
                   margin="normal"
                   required
@@ -676,7 +761,7 @@ const AlbumCustomizationPage = () => {
                   error={formErrors.genre.error}
                   helperText={
                     formErrors.genre.error ? formErrors.genre.message :
-                    `${albumData.genre.length}/${GENRE_MAX_LENGTH} characters`
+                    `${albumData.genre.length}/${FORM_LIMITS.GENRE_MAX_LENGTH} characters`
                   }
                   margin="normal"
                   InputProps={{
@@ -713,7 +798,7 @@ const AlbumCustomizationPage = () => {
                   error={formErrors.description.error}
                   helperText={
                     formErrors.description.error ? formErrors.description.message :
-                    `${albumData.description.length}/${DESCRIPTION_MAX_LENGTH} characters`
+                    `${albumData.description.length}/${FORM_LIMITS.DESCRIPTION_MAX_LENGTH} characters`
                   }
                   margin="normal"
                   multiline
@@ -849,7 +934,26 @@ const AlbumCustomizationPage = () => {
                   fullWidth
                   variant="outlined"
                   startIcon={<PreviewIcon />}
-                  onClick={() => {/* TODO: Implement preview */}}
+                  onClick={() => {
+                    if (albumId) {
+                      navigate(`/albums/${albumId}`);
+                    } else {
+                      // For new albums, show a message that they need to save first
+                      setError('Please save the album first before previewing.');
+                    }
+                  }}
+                  disabled={!albumId || isLoading}
+                  sx={{
+                    borderRadius: 2,
+                    py: 1.5,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: 2,
+                    }
+                  }}
                 >
                   Preview
                 </Button>
@@ -858,9 +962,24 @@ const AlbumCustomizationPage = () => {
                   variant="contained"
                   startIcon={<SaveIcon />}
                   onClick={handleSaveAlbum}
-                  disabled={isLoading}
+                  disabled={isLoading || (import.meta.env.DEV && albumId === 'dev-placeholder-album')}
+                  sx={{
+                    borderRadius: 2,
+                    py: 1.5,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    boxShadow: `0px 4px 12px ${alpha(theme.palette.primary.main, 0.2)}`,
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      boxShadow: `0px 6px 16px ${alpha(theme.palette.primary.main, 0.3)}`,
+                      transform: 'translateY(-2px)',
+                    },
+                    '&:active': {
+                      transform: 'translateY(0)',
+                    }
+                  }}
                 >
-                  {isLoading ? 'Saving...' : 'Save'}
+                  {isLoading ? 'Saving...' : albumId === 'dev-placeholder-album' ? 'Cannot Save (Dev)' : 'Save Album'}
                 </Button>
               </Box>
             </Grid>

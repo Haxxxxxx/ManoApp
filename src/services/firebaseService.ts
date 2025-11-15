@@ -8,24 +8,58 @@ import { storage } from '../firebase/config';
 import { FirebaseStorage } from 'firebase/storage';
 import { UserProfile } from '../types/user';
 import { ArtistProfile } from '../types/artist';
+import { Album, AlbumSong } from '../types/album';
+import { ActivityItem } from '../types/activity';
+import { Release } from '../types/release';
+import { FILE_SIZE_LIMITS } from '../utils/constants';
 
 const tripsCollection = 'trips';
 const songsCollection = 'songs';
 
 export const createTrip = async (trip: Omit<Trip, 'id'>) => {
   try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('You must be logged in to create a trip');
+    }
+
+    // Validate required fields
+    if (!trip.name || !trip.name.trim()) {
+      throw new Error('Trip name is required');
+    }
+
+    const now = new Date().toISOString();
     const tripData = {
-    ...trip,
-    createdAt: new Date().toISOString(),
-      songs: trip.songs || [],
+      ...trip,
+      name: trip.name.trim(),
+      userId: trip.userId || currentUser.uid, // Ensure userId is set
+      createdAt: now,
+      updatedAt: now,
+      songs: [], // Always empty - songs are stored in separate collection
       collaborators: trip.collaborators || [],
-      tags: trip.tags || []
+      tags: trip.tags || [],
+      status: trip.status || 'draft',
+      type: trip.type || 'project'
     };
     
     const docRef = await addDoc(collection(db, tripsCollection), tripData);
-    return { ...tripData, id: docRef.id };
+    const createdTrip = { ...tripData, id: docRef.id };
+    
+    // Log activity
+    try {
+      await logTripActivity(
+        docRef.id,
+        currentUser.uid,
+        'trip_created',
+        `Trip "${trip.name}" was created`
+      );
+    } catch (logError) {
+      // Continue even if activity logging fails
+    }
+    
+    return createdTrip;
   } catch (error) {
-    console.error('Error creating trip:', error);
+    // Error creating trip
     throw error;
   }
 };
@@ -44,7 +78,7 @@ export const getTrips = async (userId: string) => {
     ...doc.data()
   })) as Trip[];
   } catch (error) {
-    console.error('Error fetching trips:', error);
+    // Error fetching trips
     throw error;
   }
 };
@@ -81,7 +115,7 @@ export const getTrip = async (tripId: string): Promise<Trip | null> => {
     
     return null;
   } catch (error) {
-    console.error('Error getting trip:', error);
+    // Error getting trip
     throw error;
   }
 };
@@ -105,7 +139,7 @@ export const updateTrip = async (tripId: string, tripData: Partial<Trip>) => {
       ...updatedDoc.data()
     } as Trip;
   } catch (error) {
-    console.error('Error updating trip:', error);
+    // Error updating trip
     throw error;
   }
 };
@@ -147,7 +181,7 @@ export const deleteTrip = async (tripId: string): Promise<void> => {
     await Promise.all(deletePromises);
     
   } catch (error) {
-    console.error('Error deleting trip:', error);
+    // Error deleting trip
     throw error;
   }
 };
@@ -165,11 +199,13 @@ export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
       throw new Error('You must be logged in to create a song');
     }
 
+    const now = new Date().toISOString();
     const songData = {
       ...song,
       tripId,
       userId: currentUser.uid,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now, // Add updatedAt for consistency
       metadata: {
         ...song.metadata,
         tags: song.metadata?.tags || [],
@@ -177,7 +213,7 @@ export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
       }
     };
 
-    // Create the song document
+    // Create the song document in the songs collection (source of truth)
     const docRef = await addDoc(collection(db, songsCollection), songData);
     const createdSong = { ...songData, id: docRef.id };
 
@@ -188,27 +224,49 @@ export const createSong = async (tripId: string, song: Omit<Song, 'id'>) => {
         // Create an empty file to represent the folder
         await uploadString(folderRef, '', 'raw');
       } catch (storageError) {
-        console.warn('Failed to create storage folder:', storageError);
         // Continue even if folder creation fails
       }
     }
 
-    // Update the trip's songs array
-    const tripRef = doc(db, tripsCollection, tripId);
-    const tripData = tripDoc.data();
-    const updatedSongs = [...(tripData.songs || []), createdSong];
-    
-    await updateDoc(tripRef, { 
-      songs: updatedSongs,
-      updatedAt: new Date().toISOString()
-    });
+    // Log activity in trip
+    try {
+      await logTripActivity(
+        tripId,
+        currentUser.uid,
+        'song_created',
+        `Song "${song.title}" was added to the trip`
+      );
+    } catch (logError) {
+      // Continue even if activity logging fails
+    }
 
-    console.log('Song created successfully:', createdSong);
+    // Note: We no longer update trip.songs array - songs collection is the source of truth
+    // The trip.songs array is kept for backward compatibility but should not be relied upon
+    // Always fetch songs using getSongs(tripId) instead of trip.songs
 
     return createdSong;
   } catch (error) {
-    console.error('Error creating song:', error);
+    // Error creating song
     throw error;
+  }
+};
+
+/**
+ * Get song count for a trip (optimized for counting)
+ * @param tripId The trip ID
+ * @returns The number of songs in the trip
+ */
+export const getSongCount = async (tripId: string): Promise<number> => {
+  try {
+    const songsQuery = query(
+      collection(db, songsCollection),
+      where('tripId', '==', tripId)
+    );
+    const snapshot = await getDocs(songsQuery);
+    return snapshot.size;
+  } catch (error) {
+    // Error getting song count
+    return 0;
   }
 };
 
@@ -225,7 +283,7 @@ export const getSongsByTripId = async (tripId: string) => {
       ...doc.data()
     })) as Song[];
   } catch (error) {
-    console.error('Error fetching songs:', error);
+    // Error fetching songs
     throw error;
   }
 };
@@ -243,7 +301,7 @@ export const getUserSongs = async (userId: string) => {
       ...doc.data()
     })) as Song[];
   } catch (error) {
-    console.error('Error fetching user songs:', error);
+    // Error fetching user songs
     throw error;
   }
 };
@@ -262,7 +320,7 @@ export const getSong = async (songId: string) => {
 
 export const updateSong = async (songId: string, song: Partial<Song>) => {
   try {
-    // Get the song first to get the tripId
+    // Get the song first to verify it exists
     const songRef = doc(db, songsCollection, songId);
     const songDoc = await getDoc(songRef);
     
@@ -270,38 +328,22 @@ export const updateSong = async (songId: string, song: Partial<Song>) => {
       throw new Error('Song not found');
     }
     
-    const songData = songDoc.data();
-    const tripId = songData.tripId;
-    
-    // Update the song document
-    await updateDoc(songRef, song);
+    // Update the song document in the songs collection (source of truth)
+    await updateDoc(songRef, {
+      ...song,
+      updatedAt: new Date().toISOString()
+    });
     
     // Get the updated song data
     const updatedSongDoc = await getDoc(songRef);
     const updatedSong = { id: updatedSongDoc.id, ...updatedSongDoc.data() } as Song;
     
-    // Get the trip document
-    const tripRef = doc(db, tripsCollection, tripId);
-    const tripDoc = await getDoc(tripRef);
-    
-    if (!tripDoc.exists()) {
-      throw new Error('Trip not found');
-    }
-    
-    const tripData = tripDoc.data();
-    const tripSongs = tripData.songs || [];
-    
-    // Update the song in the trip's songs array
-    const updatedSongs = tripSongs.map((s: Song) => 
-      s.id === songId ? updatedSong : s
-    );
-    
-    // Update the trip document
-    await updateDoc(tripRef, { songs: updatedSongs });
+    // Note: We no longer update trip.songs array - songs collection is the source of truth
+    // Always fetch songs using getSongs(tripId) instead of trip.songs
     
     return updatedSong;
   } catch (error) {
-    console.error('Error updating song:', error);
+    // Error updating song
     throw error;
   }
 };
@@ -340,13 +382,13 @@ export const deleteSong = async (songId: string): Promise<void> => {
       try {
         await deleteFile(songData.filePath);
       } catch (storageError) {
-        console.error('Error deleting song file from storage:', storageError);
+        // Error deleting song file from storage
         // Continue with the deletion even if storage deletion fails
       }
     }
     
   } catch (error) {
-    console.error('Error deleting song:', error);
+    // Error deleting song
     throw error;
   }
 };
@@ -378,7 +420,7 @@ export const inviteCollaborator = async (tripId: string, artistId: string) => {
       message: `Added collaborator successfully`
     };
   } catch (error) {
-    console.error('Error inviting collaborator:', error);
+    // Error inviting collaborator
     throw error;
   }
 };
@@ -403,7 +445,7 @@ export const removeCollaborator = async (tripId: string, artistId: string) => {
       message: `Removed collaborator`
     };
   } catch (error) {
-    console.error('Error removing collaborator:', error);
+    // Error removing collaborator
     throw error;
   }
 };
@@ -415,21 +457,45 @@ export const removeCollaborator = async (tripId: string, artistId: string) => {
  */
 export const createPlaylist = async (playlistData: Omit<Trip, 'id'>): Promise<Trip> => {
   try {
-    const playlistRef = collection(db, 'trips');
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('You must be logged in to create a playlist');
+    }
+
+    const now = new Date().toISOString();
     const newPlaylist = {
       ...playlistData,
+      userId: playlistData.userId || currentUser.uid, // Ensure userId is set
       type: 'playlist' as const,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: now,
+      updatedAt: now,
+      songs: [], // Always empty - songs are stored in separate collection
+      collaborators: playlistData.collaborators || [],
+      tags: playlistData.tags || [],
+      status: playlistData.status || 'draft'
     };
     
-    const docRef = await addDoc(playlistRef, newPlaylist);
-    return {
+    const docRef = await addDoc(collection(db, 'trips'), newPlaylist);
+    const createdPlaylist = {
       id: docRef.id,
       ...newPlaylist
     };
+    
+    // Log activity
+    try {
+      await logTripActivity(
+        docRef.id,
+        currentUser.uid,
+        'playlist_created',
+        `Playlist "${playlistData.name}" was created`
+      );
+    } catch (logError) {
+      // Continue even if activity logging fails
+    }
+    
+    return createdPlaylist;
   } catch (error) {
-    console.error('Error creating playlist:', error);
+    // Error creating playlist
     throw error;
   }
 };
@@ -456,7 +522,7 @@ export const getAnalytics = async (userId: string): Promise<any> => {
     const songsQuery = query(songsRef, where('userId', '==', userId));
     const songsSnapshot = await getDocs(songsQuery);
     
-    const songs: any[] = [];
+    const songs: Song[] = [];
     songsSnapshot.forEach((doc) => {
       songs.push({ id: doc.id, ...doc.data() });
     });
@@ -520,7 +586,7 @@ export const getAnalytics = async (userId: string): Promise<any> => {
       topCollaborators
     };
   } catch (error) {
-    console.error('Error getting analytics:', error);
+    // Error getting analytics
     throw error;
   }
 };
@@ -539,9 +605,8 @@ export const deleteFile = async (filePath: string): Promise<void> => {
   try {
     const fileRef = ref(storageInstance, filePath);
     await deleteObject(fileRef);
-    console.log('File deleted successfully:', filePath);
   } catch (error) {
-    console.error('Error deleting file:', error);
+    // Error deleting file
     throw error;
   }
 };
@@ -551,7 +616,7 @@ export const deleteFile = async (filePath: string): Promise<void> => {
  * @param searchTerm The search term to match against name or email
  * @returns Array of matching artist profiles
  */
-export const searchArtists = async (searchTerm: string): Promise<any[]> => {
+export const searchArtists = async (searchTerm: string): Promise<ArtistProfile[]> => {
   try {
     const artistsRef = collection(db, 'artists');
     const q = query(
@@ -565,7 +630,7 @@ export const searchArtists = async (searchTerm: string): Promise<any[]> => {
     const results = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
+    } as ArtistProfile));
 
     // Also search by email if it's a valid email format
     if (searchTerm.includes('@')) {
@@ -578,7 +643,7 @@ export const searchArtists = async (searchTerm: string): Promise<any[]> => {
       const emailResults = emailSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      } as ArtistProfile));
       
       // Combine results, removing duplicates
       const combinedResults = [...results];
@@ -593,7 +658,7 @@ export const searchArtists = async (searchTerm: string): Promise<any[]> => {
     
     return results;
   } catch (error) {
-    console.error('Error searching artists:', error);
+    // Error searching artists
     throw error;
   }
 };
@@ -602,16 +667,16 @@ export const searchArtists = async (searchTerm: string): Promise<any[]> => {
  * Gets all artists from the database
  * @returns Array of all artist profiles
  */
-export const getAllArtists = async (): Promise<any[]> => {
+export const getAllArtists = async (): Promise<ArtistProfile[]> => {
   try {
     const artistsRef = collection(db, 'artists');
     const querySnapshot = await getDocs(artistsRef);
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
+    } as ArtistProfile));
   } catch (error) {
-    console.error('Error fetching artists:', error);
+    // Error fetching artists
     throw error;
   }
 };
@@ -629,7 +694,7 @@ export const updateTripCollaborators = async (tripId: string, collaboratorIds: s
       updatedAt: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error updating trip collaborators:', error);
+    // Error updating trip collaborators
     throw error;
   }
 };
@@ -657,7 +722,7 @@ export const getCollaborativeTrips = async (userId: string): Promise<Trip[]> => 
       ...doc.data()
     } as Trip));
   } catch (error) {
-    console.error('Error fetching collaborative trips:', error);
+    // Error fetching collaborative trips
     throw error;
   }
 };
@@ -684,7 +749,7 @@ export const logTripActivity = async (
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Error logging trip activity:', error);
+    // Error logging trip activity
     throw error;
   }
 };
@@ -694,7 +759,7 @@ export const logTripActivity = async (
  * @param tripId The trip ID
  * @returns Array of activity logs
  */
-export const getTripLogs = async (tripId: string): Promise<any[]> => {
+export const getTripLogs = async (tripId: string): Promise<ActivityItem[]> => {
   try {
     const logsRef = collection(db, 'trips', tripId, 'logs');
     const q = query(logsRef, orderBy('timestamp', 'desc'));
@@ -702,9 +767,9 @@ export const getTripLogs = async (tripId: string): Promise<any[]> => {
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
+    } as ActivityItem));
   } catch (error) {
-    console.error('Error fetching trip logs:', error);
+    // Error fetching trip logs
     throw error;
   }
 };
@@ -725,7 +790,7 @@ export const isUserCollaborator = async (tripId: string, userId: string): Promis
     const tripData = tripDoc.data();
     return tripData.collaborators?.includes(userId) || false;
   } catch (error) {
-    console.error('Error checking if user is collaborator:', error);
+    // Error checking if user is collaborator
     throw error;
   }
 };
@@ -758,7 +823,7 @@ export const getUserProfile = async (userId: string): Promise<ArtistProfile> => 
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date()
     } as ArtistProfile;
   } catch (error) {
-    console.error('Error getting user profile:', error);
+    // Error getting user profile
     throw error;
   }
 };
@@ -778,10 +843,10 @@ export const updateUserProfile = async (userId: string, data: Partial<ArtistProf
         acc[key] = value;
       }
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, unknown>);
     
     // Prepare update data
-    const updateData: any = {
+    const updateData: Partial<ArtistProfile> & { updatedAt?: ReturnType<typeof serverTimestamp>; createdAt?: ReturnType<typeof serverTimestamp> } = {
       ...cleanData,
       updatedAt: serverTimestamp()
     };
@@ -801,7 +866,7 @@ export const updateUserProfile = async (userId: string, data: Partial<ArtistProf
       });
     }
   } catch (error) {
-    console.error('Error updating user profile:', error);
+    // Error updating user profile
     throw error;
   }
 };
@@ -842,60 +907,75 @@ export const deleteAccount = async (userId: string): Promise<void> => {
       await user.delete();
     }
   } catch (error) {
-    console.error('Error deleting account:', error);
+    // Error deleting account
     throw error;
   }
 };
 
-// Album types
-export interface AlbumSong {
-  id: string;
-  title: string;
-  artist: string;
-  duration: number;
-  filePath?: string;
-  metadata?: {
-    source?: 'local' | 'project' | 'firebase';
-    projectName?: string;
-    bpm?: number;
-    key?: string;
-    genre?: string[];
-    tags?: string[];
-    releaseDate?: string;
-    featuring?: string[];
-    lyrics?: string;
-    videoUrl?: string;
-  };
-}
-
-export interface Album {
-  id: string;
-  userId: string;
-  title: string;
-  artist: string;
-  releaseDate: string;
-  genre: string;
-  description: string;
-  coverImage: string | null;
-  selectedPlatforms: string[];
-  songs: AlbumSong[];
-  createdAt: string;
-  updatedAt: string;
-}
+// Album types are exported from '../types/album'
+// Import them using: import { Album, AlbumSong } from '../types/album';
 
 // Album functions
 export const createAlbum = async (album: Omit<Album, 'id' | 'createdAt' | 'updatedAt'>) => {
   try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('You must be logged in to create an album');
+    }
+
+    // Validate that userId matches current user
+    if (album.userId !== currentUser.uid) {
+      throw new Error('Album userId must match the current user');
+    }
+
+    // Validate required album fields
+    if (!album.title || !album.title.trim()) {
+      throw new Error('Album title is required');
+    }
+    if (!album.artist || !album.artist.trim()) {
+      throw new Error('Album artist is required');
+    }
+    if (!album.releaseDate) {
+      throw new Error('Album release date is required');
+    }
+
+    // Validate that songs array is not empty
+    if (!album.songs || album.songs.length === 0) {
+      throw new Error('Album must contain at least one song');
+    }
+
+    // Validate that all songs have required fields
+    for (const song of album.songs) {
+      if (!song.id || !song.title || !song.artist) {
+        throw new Error('All songs must have id, title, and artist');
+      }
+      // Validate duration is a number
+      if (typeof song.duration !== 'number' || song.duration < 0) {
+        throw new Error('All songs must have a valid duration (non-negative number)');
+      }
+    }
+
+    const now = new Date().toISOString();
     const albumData = {
       ...album,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      userId: currentUser.uid, // Ensure userId is set correctly
+      title: album.title.trim(),
+      artist: album.artist.trim(),
+      genre: album.genre?.trim() || '',
+      description: album.description?.trim() || '',
+      createdAt: now,
+      updatedAt: now,
+      songs: album.songs // Store songs array in album
     };
     
     const docRef = await addDoc(collection(db, 'albums'), albumData);
-    return { ...albumData, id: docRef.id };
+    const createdAlbum = { ...albumData, id: docRef.id };
+    
+    // Note: Albums don't have activity logs like trips, but we could add them if needed
+    
+    return createdAlbum;
   } catch (error) {
-    console.error('Error creating album:', error);
+    // Error creating album
     throw error;
   }
 };
@@ -913,7 +993,7 @@ export const getAlbums = async (userId: string) => {
       ...doc.data()
     })) as Album[];
   } catch (error) {
-    console.error('Error fetching albums:', error);
+    // Error fetching albums
     throw error;
   }
 };
@@ -931,20 +1011,61 @@ export const getAlbum = async (albumId: string) => {
     }
     return null;
   } catch (error) {
-    console.error('Error getting album:', error);
+    // Error getting album
     throw error;
   }
 };
 
 export const updateAlbum = async (albumId: string, albumData: Partial<Album>) => {
   try {
-    const docRef = doc(db, 'albums', albumId);
-    await updateDoc(docRef, {
-      ...albumData,
-      updatedAt: new Date().toISOString()
-    });
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('You must be logged in to update an album');
+    }
+
+    // Get the album first to verify ownership
+    const albumRef = doc(db, 'albums', albumId);
+    const albumDoc = await getDoc(albumRef);
     
-    const updatedDoc = await getDoc(docRef);
+    if (!albumDoc.exists()) {
+      throw new Error('Album not found');
+    }
+
+    const existingAlbum = albumDoc.data() as Album;
+    
+    // Validate that userId matches current user
+    if (existingAlbum.userId !== currentUser.uid) {
+      throw new Error('You do not have permission to update this album');
+    }
+
+    // If songs are being updated, validate them
+    if (albumData.songs !== undefined) {
+      if (!albumData.songs || albumData.songs.length === 0) {
+        throw new Error('Album must contain at least one song');
+      }
+
+      // Validate that all songs have required fields
+      for (const song of albumData.songs) {
+        if (!song.id || !song.title || !song.artist) {
+          throw new Error('All songs must have id, title, and artist');
+        }
+        // Validate duration is a number
+        if (typeof song.duration !== 'number' || song.duration < 0) {
+          throw new Error('All songs must have a valid duration (non-negative number)');
+        }
+      }
+    }
+
+    // Ensure userId is not changed
+    const cleanData: Partial<Album> = {
+      ...albumData,
+      userId: currentUser.uid, // Prevent userId from being changed
+      updatedAt: new Date().toISOString()
+    };
+
+    await updateDoc(albumRef, cleanData);
+    
+    const updatedDoc = await getDoc(albumRef);
     if (!updatedDoc.exists()) {
       throw new Error('Album not found after update');
     }
@@ -954,7 +1075,7 @@ export const updateAlbum = async (albumId: string, albumData: Partial<Album>) =>
       ...updatedDoc.data()
     } as Album;
   } catch (error) {
-    console.error('Error updating album:', error);
+    // Error updating album
     throw error;
   }
 };
@@ -964,7 +1085,7 @@ export const deleteAlbum = async (albumId: string) => {
     const albumRef = doc(db, 'albums', albumId);
     await deleteDoc(albumRef);
   } catch (error) {
-    console.error('Error deleting album:', error);
+    // Error deleting album
     throw error;
   }
 };
@@ -975,10 +1096,9 @@ export const uploadFile = async (
   metadata?: { [key: string]: string }
 ): Promise<string> => {
   try {
-    // Validate file size (max 10MB)
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error('File size exceeds 10MB limit');
+    // Validate file size
+    if (file.size > FILE_SIZE_LIMITS.AUDIO_FIREBASE) {
+      throw new Error(`File size exceeds ${FILE_SIZE_LIMITS.AUDIO_FIREBASE / (1024 * 1024)}MB limit`);
     }
 
     // Get storage reference
@@ -997,7 +1117,103 @@ export const uploadFile = async (
     const downloadURL = await getDownloadURL(snapshot.ref);
     return downloadURL;
   } catch (error) {
-    console.error('Error in uploadFile:', error);
+    // Error in uploadFile
+    throw error;
+  }
+};
+
+// Release CRUD operations
+const releasesCollection = 'releases';
+
+/**
+ * Create a new release
+ */
+export const createRelease = async (release: Omit<Release, 'id' | 'createdAt' | 'updatedAt'>): Promise<Release> => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error('You must be logged in to create a release');
+    }
+
+    const now = new Date().toISOString();
+    const releaseData = {
+      ...release,
+      userId: release.userId || currentUser.uid,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const docRef = await addDoc(collection(db, releasesCollection), releaseData);
+    return { id: docRef.id, ...releaseData };
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get release by ID
+ */
+export const getRelease = async (releaseId: string): Promise<Release | null> => {
+  try {
+    const docRef = doc(db, releasesCollection, releaseId);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as Release;
+    }
+    return null;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get releases for a project
+ */
+export const getReleasesForProject = async (projectId: string): Promise<Release[]> => {
+  try {
+    const q = query(
+      collection(db, releasesCollection),
+      where('projectId', '==', projectId),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Release));
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Update a release
+ */
+export const updateRelease = async (releaseId: string, updates: Partial<Release>): Promise<Release> => {
+  try {
+    const releaseRef = doc(db, releasesCollection, releaseId);
+    await updateDoc(releaseRef, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const updatedDoc = await getDoc(releaseRef);
+    if (!updatedDoc.exists()) {
+      throw new Error('Release not found');
+    }
+
+    return { id: updatedDoc.id, ...updatedDoc.data() } as Release;
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Delete a release
+ */
+export const deleteRelease = async (releaseId: string): Promise<void> => {
+  try {
+    const releaseRef = doc(db, releasesCollection, releaseId);
+    await deleteDoc(releaseRef);
+  } catch (error) {
     throw error;
   }
 }; 

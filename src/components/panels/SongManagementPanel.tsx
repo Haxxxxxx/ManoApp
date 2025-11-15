@@ -28,7 +28,7 @@ import {
   InputLabel,
   InputAdornment
 } from '@mui/material';
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -39,6 +39,7 @@ import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import { Song } from '../../types';
 import { updateSong, deleteSong } from '../../services/firebaseService';
 import { exportMixtapeForSoundCloud } from '../../services/exportService';
+import { getErrorMessage } from '../../utils/storageHelpers';
 
 interface SongManagementPanelProps {
   songs: Song[];
@@ -78,7 +79,7 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
   }, [songs]);
 
   // Handle song reordering
-  const handleDragEnd = (result: any) => {
+  const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
     const items = Array.from(editableSongs);
@@ -128,7 +129,7 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
       onSongsUpdated(updatedSongs);
       setEditingSongId(null);
     } catch (error) {
-      console.error('Error updating song:', error);
+      // Error updating song
     }
   };
 
@@ -194,7 +195,7 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
         );
       } else {
         // Spotify export would go here
-        console.log('Spotify export not implemented yet');
+        throw new Error('Spotify export not implemented yet');
       }
       
       setExportSuccess(true);
@@ -202,8 +203,8 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
         handleCloseExportDialog();
       }, 2000);
     } catch (error) {
-      console.error('Error exporting mixtape:', error);
-      setExportError(error instanceof Error ? error.message : 'Unknown error occurred');
+      // Error exporting mixtape
+      setExportError(getErrorMessage(error, 'Unknown error occurred'));
     } finally {
       setIsExporting(false);
     }
@@ -232,8 +233,7 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
       
       setDeleteConfirmOpen(false);
     } catch (error) {
-      console.error('Error deleting song:', error);
-      setError('Failed to delete song. Please try again.');
+      setError(getErrorMessage(error, 'Failed to delete song. Please try again.'));
     } finally {
       setDeletingSongId(null);
       setSongToDelete(null);

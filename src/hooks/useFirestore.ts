@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   collection, 
   doc, 
@@ -23,7 +23,7 @@ import { Trip } from '../types/trip';
 // Cache interface
 interface Cache {
   [key: string]: {
-    data: any;
+    data: unknown;
     timestamp: number;
   };
 }
@@ -33,6 +33,22 @@ const CACHE_EXPIRATION = 5 * 60 * 1000;
 
 // Global cache object
 const cache: Cache = {};
+
+// Function to clear cache for a specific path pattern
+export const clearCacheForPath = (pathPattern: string) => {
+  Object.keys(cache).forEach(key => {
+    if (key.startsWith(pathPattern)) {
+      delete cache[key];
+    }
+  });
+};
+
+// Function to clear all cache
+export const clearAllCache = () => {
+  Object.keys(cache).forEach(key => {
+    delete cache[key];
+  });
+};
 
 /**
  * Custom hook for fetching Firestore data with caching
@@ -51,8 +67,11 @@ export function useFirestore<T = DocumentData>(
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const cancelledRef = useRef(false);
 
   const fetchData = useCallback(async () => {
+    cancelledRef.current = false;
+
     try {
       setLoading(true);
       setError(null);
@@ -66,8 +85,10 @@ export function useFirestore<T = DocumentData>(
         cachedData &&
         now - cachedData.timestamp < (options?.cacheTime || CACHE_EXPIRATION)
       ) {
-        setData(cachedData.data);
-        setLoading(false);
+        if (!cancelledRef.current) {
+          setData(cachedData.data as T);
+          setLoading(false);
+        }
         return;
       }
 
@@ -97,23 +118,33 @@ export function useFirestore<T = DocumentData>(
         })) as T;
       }
 
-      // Update cache
-      cache[cacheKey] = {
-        data: result,
-        timestamp: now
-      };
+      if (!cancelledRef.current) {
+        // Update cache
+        cache[cacheKey] = {
+          data: result,
+          timestamp: now
+        };
 
-      setData(result);
+        setData(result);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('An error occurred'));
+      if (!cancelledRef.current) {
+        setError(err instanceof Error ? err : new Error('An error occurred'));
+      }
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) {
+        setLoading(false);
+      }
     }
   }, [path, options?.constraints, options?.type, options?.cacheTime]);
 
   // Initial fetch
   useEffect(() => {
     fetchData();
+
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [fetchData]);
 
   // Clear cache for this path
@@ -164,7 +195,7 @@ export const useUserTrips = (userId: string) => {
         setLoading(false);
       },
       (err) => {
-        console.error('Error fetching trips:', err);
+        // Error fetching trips
         setError(err as Error);
         setLoading(false);
       }
@@ -187,7 +218,7 @@ export const useUserTrips = (userId: string) => {
       })) as Trip[];
       setData(trips);
     } catch (err) {
-      console.error('Error refreshing trips:', err);
+      // Error refreshing trips
       setError(err as Error);
     } finally {
       setLoading(false);
@@ -222,7 +253,7 @@ export const useSharedTrips = (userId: string) => {
         setLoading(false);
       },
       (err) => {
-        console.error('Error fetching shared trips:', err);
+        // Error fetching shared trips
         setError(err as Error);
         setLoading(false);
       }
@@ -245,7 +276,7 @@ export const useSharedTrips = (userId: string) => {
       })) as Trip[];
       setData(trips);
     } catch (err) {
-      console.error('Error refreshing shared trips:', err);
+      // Error refreshing shared trips
       setError(err as Error);
     } finally {
       setLoading(false);

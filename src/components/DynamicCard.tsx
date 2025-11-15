@@ -18,7 +18,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
-import { Song } from '../types';
+import { Song } from '../types/index';
 
 export interface CardTag {
   label: string;
@@ -80,10 +80,6 @@ const DynamicCard: React.FC<DynamicCardProps> = ({
     if (onDelete) onDelete();
   };
 
-  const formatDuration = (duration: string) => {
-    const [minutes, seconds] = duration.split(':').map(Number);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
 
   return (
     <Fade in={true} timeout={500}>

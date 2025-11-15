@@ -10,6 +10,7 @@ import {
   CircularProgress,
   Alert,
   Dialog,
+  DialogTitle,
   DialogContent,
   IconButton,
   InputAdornment,
@@ -43,6 +44,7 @@ import { useTrips } from '../../contexts/TripContext';
 import { Trip } from '../../types/trip';
 import { useNavigate } from 'react-router-dom';
 import { alpha, useTheme } from '@mui/material/styles';
+import { SUGGESTED_TAGS } from '../../utils/constants';
 
 // Project templates
 type TemplateId = 'project' | 'single' | 'album';
@@ -78,14 +80,6 @@ const PROJECT_TEMPLATES: ProjectTemplate[] = [
     tags: ['album', 'release']
   }
 ];
-
-// Suggested tags by category
-const SUGGESTED_TAGS = {
-  genres: ['Pop', 'Rock', 'Hip Hop', 'R&B', 'Electronic', 'Jazz', 'Classical'],
-  moods: ['Happy', 'Energetic', 'Calm', 'Melancholic', 'Dark', 'Upbeat'],
-  types: ['Single', 'Album', 'EP', 'Demo', 'Remix', 'Cover'],
-  status: ['In Progress', 'Draft', 'Final', 'Released']
-};
 
 interface EmptyProjectPanelProps {
   onClose: () => void;
@@ -247,7 +241,7 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
       }, 1500);
 
     } catch (error) {
-      console.error('Error creating project:', error);
+      // Error creating project
       setError('Failed to create project. Please try again.');
     } finally {
       setIsCreating(false);
@@ -255,10 +249,12 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
   };
 
   const renderContent = () => (
-    <Box sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
-      <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-        Create New Project
-      </Typography>
+    <Box sx={{ p: isDialog ? 0 : 3, maxWidth: 800, mx: 'auto' }}>
+      {!isDialog && (
+        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
+          Create New Project
+        </Typography>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
@@ -285,15 +281,37 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
             <Card 
               variant="outlined"
               sx={{ 
+                borderWidth: selectedTemplate.id === template.id ? 2 : 1,
                 borderColor: selectedTemplate.id === template.id ? 'primary.main' : 'divider',
-                bgcolor: selectedTemplate.id === template.id ? alpha(theme.palette.primary.main, 0.05) : 'background.paper',
-                transition: 'all 0.2s',
-                transform: selectedTemplate.id === template.id ? 'scale(1.02)' : 'scale(1)',
+                bgcolor: selectedTemplate.id === template.id 
+                  ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`
+                  : 'background.paper',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: selectedTemplate.id === template.id ? 'scale(1.03)' : 'scale(1)',
+                boxShadow: selectedTemplate.id === template.id 
+                  ? `0px 4px 16px ${alpha(theme.palette.primary.main, 0.2)}`
+                  : 'none',
+                position: 'relative',
+                overflow: 'hidden',
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: selectedTemplate.id === template.id ? '4px' : '0px',
+                  background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                  transition: 'height 0.3s ease',
+                },
                 '&:hover': {
                   borderColor: 'primary.main',
-                  bgcolor: alpha(theme.palette.primary.main, 0.05),
-                  transform: 'scale(1.02)',
-                  boxShadow: 1
+                  borderWidth: 2,
+                  bgcolor: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.08)} 100%)`,
+                  transform: 'translateY(-4px) scale(1.03)',
+                  boxShadow: `0px 8px 24px ${alpha(theme.palette.primary.main, 0.25)}`,
+                  '&::before': {
+                    height: '4px',
+                  },
                 }
               }}
             >
@@ -346,11 +364,40 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
             onChange={(e) => setTitle(e.target.value)}
             required
             placeholder="Enter your project title"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderWidth: 2,
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: theme.palette.primary.main,
+              },
+            }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
                   <Tooltip title="This will be the main identifier for your project">
-                    <InfoIcon color="action" />
+                    <InfoIcon 
+                      color="action" 
+                      sx={{ 
+                        transition: 'all 0.2s ease',
+                        '&:hover': { 
+                          color: 'primary.main',
+                          transform: 'scale(1.1)',
+                        },
+                      }} 
+                    />
                   </Tooltip>
                 </InputAdornment>
               ),
@@ -367,11 +414,40 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
             multiline
             rows={3}
             placeholder="Brief description of your project (optional)"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderWidth: 2,
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: theme.palette.primary.main,
+              },
+            }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
                   <Tooltip title="Add context about your project">
-                    <InfoIcon color="action" />
+                    <InfoIcon 
+                      color="action" 
+                      sx={{ 
+                        transition: 'all 0.2s ease',
+                        '&:hover': { 
+                          color: 'primary.main',
+                          transform: 'scale(1.1)',
+                        },
+                      }} 
+                    />
                   </Tooltip>
                 </InputAdornment>
               ),
@@ -494,12 +570,20 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
           }
           sx={{ 
             minWidth: 150,
-            position: 'relative',
-            ...(isCreating && {
-              '& .MuiButton-startIcon': {
-                animation: 'spin 1s linear infinite',
-              }
-            })
+            borderRadius: 2,
+            fontWeight: 600,
+            textTransform: 'none',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            '&:hover:not(:disabled)': {
+              transform: 'translateY(-2px)',
+              boxShadow: `0px 6px 20px ${alpha(theme.palette.primary.main, 0.4)}`,
+            },
+            '&:active:not(:disabled)': {
+              transform: 'translateY(0)',
+            },
+            '&:disabled': {
+              opacity: 0.6,
+            },
           }}
         >
           {isCreating ? 'Creating...' : 'Create Project'}
@@ -521,6 +605,7 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
           }
         }}
       >
+        <DialogTitle>Create New Project</DialogTitle>
         <DialogContent>
           {renderContent()}
         </DialogContent>

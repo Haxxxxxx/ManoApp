@@ -84,7 +84,7 @@ const MetadataEditorPanel = ({ songs, onClose, tripId }: MetadataEditorPanelProp
       // Update the song in the database
       await updateSong(songId, { imagePath: imageUrl });
     } catch (error) {
-      console.error('Error uploading cover art:', error);
+      // Error uploading cover art
       // Reset the uploading state
       setEditableSongs(prev => prev.map(song => 
         song.id === songId ? { ...song, isUploading: false } : song
@@ -108,7 +108,7 @@ const MetadataEditorPanel = ({ songs, onClose, tripId }: MetadataEditorPanelProp
       
       onClose();
     } catch (error) {
-      console.error('Error saving songs:', error);
+      // Error saving songs
     } finally {
       setSaving(false);
     }

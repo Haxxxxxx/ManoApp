@@ -6,6 +6,7 @@ import { Trip } from '../../types/trip';
 import { Song } from '../../types/song';
 import { exportForSoundCloud, exportMixtapeForSoundCloud, exportAlbum } from '../../services/exportService';
 import { publishToSoundCloud } from '../../services/soundcloudService';
+import { getErrorMessage } from '../../utils/storageHelpers';
 import { publishToSpotify } from '../../services/spotifyService';
 import LocalFileBrowser from '../LocalFileBrowser';
 import { LocalFile, convertLocalFileToSong } from '../../services/localFileService';
@@ -110,7 +111,7 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
       
       setSuccess(`Successfully published to ${platform}`);
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to publish');
+      setError(getErrorMessage(error, 'Failed to publish'));
     } finally {
       setPublishing(false);
     }
@@ -126,21 +127,8 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
       
       if (publishingData.publishType === 'album') {
         const albumSongs: AlbumSong[] = selectedSongs.map(song => {
-          // Convert duration to number
-          let durationInSeconds: number;
-          if (typeof song.duration === 'number') {
-            durationInSeconds = song.duration;
-          } else {
-            // Parse duration string in format "MM:SS" or "HH:MM:SS"
-            const parts = song.duration.split(':').map(Number);
-            if (parts.length === 2) {
-              durationInSeconds = parts[0] * 60 + parts[1];
-            } else if (parts.length === 3) {
-              durationInSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-            } else {
-              durationInSeconds = 0;
-            }
-          }
+          // Convert duration to number using utility function
+          const durationInSeconds = parseDurationToSeconds(song.duration);
 
           return {
             id: song.id,
@@ -204,7 +192,7 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
       
       setSuccess('Export completed successfully');
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to export');
+      setError(getErrorMessage(error, 'Failed to export'));
     } finally {
       setExporting(false);
     }
@@ -249,7 +237,7 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
       setSuccess('Song exported successfully!');
       handleNext();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export song');
+      setError(getErrorMessage(err, 'Failed to export song'));
     } finally {
       setExporting(false);
     }
@@ -280,7 +268,7 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
       setSuccess('Mixtape exported successfully!');
       handleNext();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to export mixtape');
+      setError(getErrorMessage(err, 'Failed to export mixtape'));
     } finally {
       setExporting(false);
     }

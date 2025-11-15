@@ -22,12 +22,12 @@ interface ThemeContextType {
 }
 
 export const defaultSettings: ThemeSettings = {
-  primaryColor: '#4CAF50', // Default green
-  secondaryColor: '#2196F3', // Default blue
+  primaryColor: '#DC2626', // Vibrant red from gradient
+  secondaryColor: '#FF6B35', // Orange from gradient
   darkMode: false,
   fontSize: 14,
   animations: true,
-  borderRadius: 8,
+  borderRadius: 16, // More rounded to match pig icon style
   spacing: 8,
   fontFamily: 'Roboto, Arial, sans-serif',
 };
@@ -45,31 +45,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<ThemeSettings>(defaultSettings);
   const [theme, setTheme] = useState<Theme>(createTheme());
 
-  // Load user theme settings from Firestore
-  useEffect(() => {
-    const loadUserSettings = async () => {
-      if (!currentUser) return;
-
-      try {
-        const db = getFirestore();
-        const userSettingsRef = doc(db, 'userSettings', currentUser.uid);
-        const userSettingsDoc = await getDoc(userSettingsRef);
-
-        if (userSettingsDoc.exists()) {
-          const userSettings = userSettingsDoc.data() as ThemeSettings;
-          setSettings(userSettings);
-          applyTheme(userSettings);
-        }
-      } catch (error) {
-        console.error('Error loading theme settings:', error);
-      }
-    };
-
-    loadUserSettings();
-  }, [currentUser]);
-
   // Apply theme settings
-  const applyTheme = (newSettings: ThemeSettings) => {
+  const applyTheme = React.useCallback((newSettings: ThemeSettings) => {
     const newTheme = createTheme({
       palette: {
         mode: newSettings.darkMode ? 'dark' : 'light',
@@ -86,8 +63,24 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
           contrastText: newSettings.darkMode ? '#ffffff' : '#000000',
         },
         background: {
-          default: newSettings.darkMode ? '#121212' : '#f5f5f5',
-          paper: newSettings.darkMode ? '#1e1e1e' : '#ffffff',
+          default: newSettings.darkMode ? '#1a0a0a' : '#FFF5F0', // Light peach background
+          paper: newSettings.darkMode ? '#2a1a1a' : '#FFFFFF',
+        },
+        error: {
+          main: '#DC2626',
+          light: '#EF4444',
+          dark: '#991B1B',
+        },
+        warning: {
+          main: '#FF6B35',
+          light: '#FF8C5A',
+          dark: '#E55A2B',
+        },
+        info: {
+          main: '#3B82F6',
+        },
+        success: {
+          main: '#10B981',
         },
       },
       typography: {
@@ -133,20 +126,25 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
           styleOverrides: {
             body: {
               transition: newSettings.animations ? 'all 0.3s ease-in-out' : 'none',
+              background: newSettings.darkMode 
+                ? 'linear-gradient(135deg, #1a0a0a 0%, #2a1a1a 100%)'
+                : 'linear-gradient(135deg, #FFF5F0 0%, #FFE5D9 100%)',
+              backgroundAttachment: 'fixed',
+              minHeight: '100vh',
               scrollbarWidth: 'thin',
               '&::-webkit-scrollbar': {
                 width: '8px',
                 height: '8px',
               },
               '&::-webkit-scrollbar-track': {
-                background: newSettings.darkMode ? '#1e1e1e' : '#f0f0f0',
+                background: newSettings.darkMode ? '#1e1e1e' : '#FFE5D9',
               },
               '&::-webkit-scrollbar-thumb': {
-                background: newSettings.darkMode ? '#555' : '#aaa',
+                background: newSettings.darkMode ? '#DC2626' : '#FF6B35',
                 borderRadius: '4px',
               },
               '&::-webkit-scrollbar-thumb:hover': {
-                background: newSettings.darkMode ? '#777' : '#888',
+                background: newSettings.darkMode ? '#EF4444' : '#FF8C5A',
               },
             },
           },
@@ -159,6 +157,16 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
               fontWeight: 500,
               transition: newSettings.animations ? 'all 0.2s ease-in-out' : 'none',
             },
+            contained: {
+              background: newSettings.darkMode
+                ? 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)'
+                : 'linear-gradient(135deg, #DC2626 0%, #FF6B35 100%)',
+              '&:hover': {
+                background: newSettings.darkMode
+                  ? 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)'
+                  : 'linear-gradient(135deg, #EF4444 0%, #FF8C5A 100%)',
+              },
+            },
           },
         },
         MuiPaper: {
@@ -166,6 +174,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
             root: {
               borderRadius: newSettings.borderRadius,
               transition: newSettings.animations ? 'all 0.2s ease-in-out' : 'none',
+              background: newSettings.darkMode 
+                ? 'linear-gradient(135deg, #2a1a1a 0%, #3a2a2a 100%)'
+                : undefined,
             },
           },
         },
@@ -174,6 +185,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
             root: {
               borderRadius: newSettings.borderRadius,
               transition: newSettings.animations ? 'all 0.2s ease-in-out' : 'none',
+              background: newSettings.darkMode 
+                ? 'linear-gradient(135deg, #2a1a1a 0%, #3a2a2a 100%)'
+                : undefined,
             },
           },
         },
@@ -181,6 +195,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
           styleOverrides: {
             paper: {
               borderRadius: newSettings.borderRadius * 1.5,
+              background: newSettings.darkMode 
+                ? 'linear-gradient(135deg, #2a1a1a 0%, #3a2a2a 100%)'
+                : 'linear-gradient(135deg, #FFFFFF 0%, #FFF5F0 100%)',
             },
           },
         },
@@ -188,7 +205,35 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     });
 
     setTheme(newTheme);
-  };
+  }, []);
+
+  // Apply default theme on mount
+  useEffect(() => {
+    applyTheme(defaultSettings);
+  }, [applyTheme]);
+
+  // Load user theme settings from Firestore
+  useEffect(() => {
+    const loadUserSettings = async () => {
+      if (!currentUser) return;
+
+      try {
+        const db = getFirestore();
+        const userSettingsRef = doc(db, 'userSettings', currentUser.uid);
+        const userSettingsDoc = await getDoc(userSettingsRef);
+
+        if (userSettingsDoc.exists()) {
+          const userSettings = userSettingsDoc.data() as ThemeSettings;
+          setSettings(userSettings);
+          applyTheme(userSettings);
+        }
+      } catch (error) {
+        // Error loading theme settings
+      }
+    };
+
+    loadUserSettings();
+  }, [currentUser, applyTheme]);
 
   // Update theme settings
   const updateSettings = async (newSettings: Partial<ThemeSettings>) => {
@@ -204,7 +249,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       const userSettingsRef = doc(db, 'userSettings', currentUser.uid);
       await setDoc(userSettingsRef, updatedSettings, { merge: true });
     } catch (error) {
-      console.error('Error saving theme settings:', error);
+      // Error saving theme settings
     }
   };
 

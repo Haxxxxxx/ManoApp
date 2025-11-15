@@ -16,6 +16,8 @@ import AudioFileIcon from '@mui/icons-material/AudioFile';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import DeleteIcon from '@mui/icons-material/Delete';
 import type { Song } from '../../types/song';
+import EmptyState from '../common/EmptyState';
+import SkeletonLoader from '../common/SkeletonLoader';
 
 interface LocalFilesSectionProps {
   localFiles: Song[];
@@ -34,8 +36,13 @@ const LocalFilesSection: React.FC<LocalFilesSectionProps> = ({
 }) => {
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-        <CircularProgress />
+      <Box sx={{ mt: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h5" fontWeight="bold">
+            Local Files
+          </Typography>
+        </Box>
+        <SkeletonLoader variant="card" count={4} />
       </Box>
     );
   }
@@ -56,40 +63,13 @@ const LocalFilesSection: React.FC<LocalFilesSectionProps> = ({
             Add Folder
           </Button>
         </Box>
-        <Paper
-          elevation={0}
-          sx={{
-            p: 4,
-            borderRadius: 3,
-            bgcolor: 'background.paper',
-            border: '1px dashed',
-            borderColor: 'divider',
-            textAlign: 'center',
-            mb: 4
-          }}
-        >
-          <AudioFileIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5, mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
-            No local files yet
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Add your local music files to get started.
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<FolderOpenIcon />}
-            onClick={onFolderSelect}
-            sx={{ 
-              borderRadius: 2,
-              boxShadow: '0px 4px 12px rgba(29, 185, 84, 0.2)',
-              '&:hover': {
-                boxShadow: '0px 6px 16px rgba(29, 185, 84, 0.3)',
-              }
-            }}
-          >
-            Add Folder
-          </Button>
-        </Paper>
+        <EmptyState
+          icon={<AudioFileIcon sx={{ fontSize: 64, color: 'primary.main' }} />}
+          title="No local files yet"
+          description="Add your local music files to get started. You can browse and select folders from your computer to import audio files."
+          actionLabel="Add Folder"
+          onAction={onFolderSelect}
+        />
       </Box>
     );
   }

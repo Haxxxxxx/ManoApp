@@ -30,8 +30,10 @@ import {
 import SettingsIcon from '@mui/icons-material/Settings';
 import AddIcon from '@mui/icons-material/Add';
 import { Trip } from '../types/trip';
+import { Song } from '../types/song';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { getErrorMessage } from '../utils/storageHelpers';
 import { useTrips } from '../contexts/TripContext';
 import { createTrip } from '../services/firebaseService';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -67,7 +69,7 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
   const [tripsExpanded, setTripsExpanded] = useState(true);
   const [sharedTripsExpanded, setSharedTripsExpanded] = useState(true);
 
-  const handleCreateTrip = async (song: any) => {
+  const handleCreateTrip = async (song: Song) => {
     if (!currentUser) return;
     
     try {
@@ -93,7 +95,7 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
       onSelectTrip(newTrip.id);
       navigate(`/trip/${newTrip.id}`);
     } catch (error) {
-      console.error('Error creating trip:', error);
+      // Error creating trip
     }
   };
 
@@ -110,7 +112,7 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
       await signOut(auth);
       navigate('/auth');
     } catch (error) {
-      console.error('Error signing out:', error);
+      // Error signing out
     }
   };
 
@@ -120,9 +122,56 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
 
   const renderSidebarContent = () => (
     <>
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
-        <img src={"/logoManoApp.png"} alt="ManoApp" style={{ width: 40, height: 40, marginRight: 10 }} />
-        <Typography variant="h6" fontWeight="bold">
+      <Box 
+        sx={{ 
+          p: 2, 
+          display: 'flex', 
+          alignItems: 'center',
+          position: 'relative',
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            bottom: 0,
+            left: 16,
+            right: 16,
+            height: '2px',
+            background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.primary.main, 0.3)}, transparent)`,
+          }
+        }}
+      >
+        <Box
+          component="img"
+          src="/pigicon.png"
+          alt="ManoApp"
+          sx={{
+            width: 48,
+            height: 48,
+            marginRight: 1.5,
+            borderRadius: 2,
+            objectFit: 'contain',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            filter: 'drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.1))',
+            '&:hover': {
+              transform: 'scale(1.1) rotate(5deg)',
+              filter: 'drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.2))',
+            },
+          }}
+        />
+        <Typography 
+          variant="h6" 
+          fontWeight="bold" 
+          sx={{ 
+            color: 'primary.main',
+            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              transform: 'scale(1.05)',
+            }
+          }}
+        >
           ManoApp
         </Typography>
         {isMobile && (
@@ -335,21 +384,15 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
         </Paper>
       )}
       
-      <Dialog
-        open={openDialog}
-        onClose={() => setOpenDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Create New Project</DialogTitle>
-        <DialogContent>
-          <EmptyProjectPanel 
-            onProjectCreated={handleCreateTrip} 
-            onClose={() => setOpenDialog(false)}
-            tripId="new"
-          />
-        </DialogContent>
-      </Dialog>
+      {openDialog && (
+        <EmptyProjectPanel 
+          onProjectCreated={handleCreateTrip} 
+          onClose={() => setOpenDialog(false)}
+          tripId="new"
+          isDialog={true}
+          mode="project"
+        />
+      )}
       
       <Dialog
         open={openSettings}

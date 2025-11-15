@@ -9,6 +9,10 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import AddIcon from '@mui/icons-material/Add';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import GraphicEqIcon from '@mui/icons-material/GraphicEq';
+import CommentIcon from '@mui/icons-material/Comment';
+import ChecklistIcon from '@mui/icons-material/Checklist';
 
 // Import panel components
 import ExportSettingsPanel from './ExportSettingsPanel';
@@ -19,11 +23,42 @@ import TagsAndCategoriesPanel from './TagsAndCategoriesPanel';
 import ProjectSettingsPanel from './ProjectSettingsPanel';
 import PublishingPanel from './PublishingPanel';
 import SongManagementPanel from './SongManagementPanel';
+import ProjectOverviewPanel from './ProjectOverviewPanel';
+import MixerPanel from './MixerPanel';
+import CommentsPanel from './CommentsPanel';
+import ReleasePlanningPanel from './ReleasePlanningPanel';
+import type { Trip } from '../../types/trip';
+import type { Song } from '../../types/song';
 
 // Define panel registry type
+export interface PanelProps {
+  onClose: () => void;
+  tripId?: string;
+  trip?: Trip;
+  songs?: Song[];
+  onSongsUpdated?: (songs: Song[]) => void;
+  // Additional optional props for specific panels
+  onStatusChange?: (newStatus: any) => void;
+  onCreateAlbum?: () => void;
+  onExport?: () => void;
+  onShare?: () => void;
+  onEdit?: () => void;
+  setActivePanel?: (panel: string) => void;
+  platform?: 'spotify' | 'soundcloud';
+  // New feature panel props
+  projectId?: string;
+  assetId?: string;
+  collaborators?: Array<{ id: string; name: string; email?: string; avatar?: string }>;
+  song?: Song;
+  onCreateRelease?: (release: any) => Promise<void>;
+  existingRelease?: any;
+  onExportMixdown?: (blob: Blob, filename: string) => void;
+  [key: string]: any; // Allow additional props for flexibility
+}
+
 export type PanelRegistry = {
   [key: string]: {
-    component: React.ComponentType<any>;
+    component: React.ComponentType<PanelProps>;
     title: string;
     icon?: React.ReactNode;
     requiresTrip?: boolean;
@@ -103,18 +138,42 @@ export const panelRegistry: PanelRegistry = {
     title: 'Create Playlist',
     icon: <PlaylistAddIcon />,
     requiresTrip: false
+  },
+  'overview': {
+    component: ProjectOverviewPanel,
+    title: 'Project Overview',
+    icon: <DashboardIcon />,
+    requiresTrip: true
+  },
+  'mixer': {
+    component: MixerPanel,
+    title: 'Audio Mixer',
+    icon: <GraphicEqIcon />,
+    requiresTrip: false
+  },
+  'comments': {
+    component: CommentsPanel,
+    title: 'Comments',
+    icon: <CommentIcon />,
+    requiresTrip: true
+  },
+  'release-planning': {
+    component: ReleasePlanningPanel,
+    title: 'Release Planning',
+    icon: <ChecklistIcon />,
+    requiresTrip: true
   }
 };
 
 // Helper function to get panel props based on panel type
 export const getPanelProps = (
   panelType: string, 
-  tripData: any, 
-  songs: any[], 
+  tripData: Trip | null, 
+  songs: Song[], 
   onClose: () => void,
   selectedTrip?: string | null
-) => {
-  let panelProps: any = { onClose };
+): PanelProps => {
+  const panelProps: PanelProps = { onClose };
   
   if (panelType === 'metadata' || panelType === 'analytics' || panelType === 'tags' || panelType === 'song-management') {
     panelProps.songs = songs;
@@ -140,10 +199,33 @@ export const getPanelProps = (
   }
   
   if (panelType === 'song-management') {
-    panelProps.onSongsUpdated = (updatedSongs: any[]) => {
+    panelProps.onSongsUpdated = (updatedSongs: Song[]) => {
       // This will be handled by the parent component
-      console.log('Songs updated:', updatedSongs);
+      // Songs updated
     };
+  }
+  
+  if (panelType === 'overview') {
+    panelProps.trip = tripData;
+    panelProps.tripId = selectedTrip || '';
+    panelProps.songs = songs;
+        // Note: Additional callbacks like onCreateAlbum, onExport, etc.
+        // can be passed via DynamicPanel's additionalProps if needed
+      }
+
+      if (panelType === 'comments') {
+        panelProps.projectId = selectedTrip || '';
+        // Collaborators will be passed via additionalProps from MainContent
+      }
+
+      if (panelType === 'release-planning') {
+        panelProps.projectId = selectedTrip || '';
+        // Collaborators will be passed via additionalProps from MainContent
+      }
+
+      if (panelType === 'mixer') {
+        // Song with stems will be passed via additionalProps
+        // This should be set when opening mixer from a song
   }
   
   return panelProps;

@@ -17,6 +17,6 @@ export interface Trip {
   status?: TripStatus;
   isPrivate?: boolean;
   template?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   publishedAt?: string;
 } 

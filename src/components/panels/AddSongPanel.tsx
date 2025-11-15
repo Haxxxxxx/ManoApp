@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -29,26 +29,25 @@ import {
   CloudUpload as CloudUploadIcon
 } from '@mui/icons-material';
 import { useDropzone } from 'react-dropzone';
-import { createSong } from '../../services/firebaseService';
+import { createSong, getSong } from '../../services/firebaseService';
+import { getErrorMessage } from '../../utils/storageHelpers';
 import { useAuth } from '../../contexts/AuthContext';
 import { Song } from '../../types/song';
 import { uploadMusicFile } from '../../services/storageService';
 import { audioService } from '../../services/audioService';
 import type { SongMetadata } from '../../types/song';
-
-// Suggested tags by category
-const SUGGESTED_TAGS = {
-  genres: ['Pop', 'Rock', 'Hip Hop', 'R&B', 'Electronic', 'Jazz', 'Classical'],
-  moods: ['Happy', 'Energetic', 'Calm', 'Melancholic', 'Dark', 'Upbeat'],
-  types: ['Single', 'Album', 'EP', 'Demo', 'Remix', 'Cover'],
-  status: ['In Progress', 'Draft', 'Final', 'Released']
-};
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const ALLOWED_AUDIO_TYPES = [
-  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/flac', 
-  'audio/aac', 'audio/ogg', 'audio/m4a'
-];
+import { FILE_SIZE_LIMITS, SUGGESTED_TAGS } from '../../utils/constants';
+import { validateAudioFile } from '../../utils/fileValidation';
+import { removeFileExtension, formatDuration } from '../../utils/formatters';
+import { validateTitle, validateArtist } from '../../utils/validation';
+import { isFeatureEnabled } from '../../config/features';
+import { httpsCallable, Functions } from 'firebase/functions';
+import { functions } from '../../firebase/config';
+import { aiService } from '../../services/aiService';
+import AIMetadataSuggestions from './AIMetadataSuggestions';
+import { AIMetadata, ApplyAISuggestionsOptions } from '../../types/ai';
+import { updateSong } from '../../services/firebaseService';
+import { useToast } from '../../hooks/useToast';
 
 interface AddSongPanelProps {
   onClose: () => void;
@@ -76,18 +75,26 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [titleError, setTitleError] = useState<string>('');
+  const [artistError, setArtistError] = useState<string>('');
+  const [aiMetadata, setAiMetadata] = useState<AIMetadata | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiApplied, setAiApplied] = useState(false);
+  const [createdSong, setCreatedSong] = useState<Song | null>(null);
+  const { showSuccess, showError, ToastComponent } = useToast();
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const validateFile = (file: File) => {
-    if (file.size > MAX_FILE_SIZE) {
-      return `File exceeds the maximum size of ${MAX_FILE_SIZE / (1024 * 1024)}MB`;
-    }
-    
-    if (!ALLOWED_AUDIO_TYPES.includes(file.type) && 
-        !file.name.toLowerCase().match(/\.(mp3|wav|flac|aac|ogg|m4a)$/)) {
-      return `File type not supported. Please use MP3, WAV, FLAC, AAC, OGG, or M4A`;
-    }
-    
-    return null;
+    return validateAudioFile(file, FILE_SIZE_LIMITS.AUDIO_UPLOAD);
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -103,7 +110,7 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
 
     setSelectedFile(file);
     if (!title) {
-      setTitle(file.name.replace(/\.[^/.]+$/, '')); // Remove file extension
+      setTitle(removeFileExtension(file.name));
     }
     setError(null);
   }, [title]);
@@ -128,6 +135,21 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
   };
 
   const handleCreateSong = async () => {
+    // Validate form before submission
+    const titleValidation = validateTitle(title);
+    const artistValidation = validateArtist(artist);
+    
+    if (titleValidation.error) {
+      setTitleError(titleValidation.message);
+      return;
+    }
+    if (artistValidation.error) {
+      setArtistError(artistValidation.message);
+      return;
+    }
+    
+    setTitleError('');
+    setArtistError('');
     if (!currentUser) {
       setError('You must be logged in to create a song');
       return;
@@ -173,26 +195,61 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
       const newSong = await createSong(tripId, {
         title: title.trim(),
         artist: artist || artistProfile?.name || currentUser.email?.split('@')[0] || 'Unknown Artist',
-        duration: audioService.formatDuration(metadata.duration),
+        duration: formatDuration(metadata.duration),
         filePath,
         userId: currentUser.uid,
         metadata: cleanMetadata
       });
       
+      setCreatedSong(newSong);
       setSuccess('Song added successfully!');
 
       if (onSongCreated) {
         onSongCreated(newSong);
       }
 
-      // Wait a moment to show the success message before closing
-      setTimeout(() => {
+      // Generate AI metadata if feature is enabled
+      if (isFeatureEnabled('aiMetadata') && newSong.id) {
+        setAiLoading(true);
+        try {
+          if (functions) {
+            const aiMetadataFunction = httpsCallable<{ assetId: string; filePath?: string }, { success: boolean; metadata: AIMetadata }>(
+              functions as Functions,
+              'aiMetadata'
+            );
+            const result = await aiMetadataFunction({
+              assetId: newSong.id,
+              filePath: filePath,
+            });
+
+            if (result.data.success && result.data.metadata) {
+              setAiMetadata(result.data.metadata);
+              // Refresh song to get updated metadata
+              const updatedSong = await getSong(newSong.id);
+              if (updatedSong) {
+                setCreatedSong(updatedSong);
+              }
+            }
+          }
+        } catch (aiError) {
+          // AI metadata generation failed, but song creation succeeded
+          console.error('Failed to generate AI metadata:', aiError);
+          // Don't show error to user - AI is optional
+        } finally {
+          setAiLoading(false);
+        }
+          } else {
+            // If AI feature is disabled, close after delay
+            if (closeTimeoutRef.current) {
+              clearTimeout(closeTimeoutRef.current);
+            }
+            closeTimeoutRef.current = setTimeout(() => {
         onClose();
       }, 1500);
+          }
 
     } catch (error) {
-      console.error('Error creating song:', error);
-      setError('Failed to create song. Please try again.');
+      setError(getErrorMessage(error, 'Failed to create song. Please try again.'));
     } finally {
       setIsCreating(false);
     }
@@ -262,14 +319,50 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
             fullWidth
             label="Song Title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setTitle(value);
+              const validation = validateTitle(value);
+              setTitleError(validation.error ? validation.message : '');
+            }}
             required
+            error={!!titleError}
+            helperText={titleError || 'Enter the name of your song'}
             placeholder="Enter your song title"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderWidth: 2,
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: theme.palette.primary.main,
+              },
+            }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
-                  <Tooltip title="The name of your song">
-                    <InfoIcon color="action" />
+                  <Tooltip title="The name of your song. This is required and will be displayed in your library.">
+                    <InfoIcon 
+                      color="action" 
+                      sx={{ 
+                        transition: 'all 0.2s ease',
+                        '&:hover': { 
+                          color: 'primary.main',
+                          transform: 'scale(1.1)',
+                        },
+                      }} 
+                    />
                   </Tooltip>
                 </InputAdornment>
               ),
@@ -282,13 +375,50 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
             fullWidth
             label="Artist"
             value={artist}
-            onChange={(e) => setArtist(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setArtist(value);
+              const validation = validateArtist(value);
+              setArtistError(validation.error ? validation.message : '');
+            }}
+            required
+            error={!!artistError}
+            helperText={artistError || 'Enter the artist name for this song'}
             placeholder="Enter artist name"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                transition: 'all 0.2s ease-in-out',
+                '&:hover': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderWidth: 2,
+                    borderColor: theme.palette.primary.main,
+                  },
+                },
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: theme.palette.primary.main,
+              },
+            }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
-                  <Tooltip title="The artist name for this song">
-                    <InfoIcon color="action" />
+                  <Tooltip title="The artist name for this song. This is required and helps organize your music library.">
+                    <InfoIcon 
+                      color="action" 
+                      sx={{ 
+                        transition: 'all 0.2s ease',
+                        '&:hover': { 
+                          color: 'primary.main',
+                          transform: 'scale(1.1)',
+                        },
+                      }} 
+                    />
                   </Tooltip>
                 </InputAdornment>
               ),
@@ -323,6 +453,21 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
                   label={tag}
                   onDelete={() => handleRemoveTag(tag)}
                   size="small"
+                  sx={{
+                    borderRadius: 2,
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      transform: 'scale(1.05)',
+                      boxShadow: `0px 2px 8px ${alpha(theme.palette.primary.main, 0.2)}`,
+                    },
+                    '& .MuiChip-deleteIcon': {
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        color: 'error.main',
+                        transform: 'scale(1.2)',
+                      },
+                    },
+                  }}
                 />
               ))}
             </Box>
@@ -368,6 +513,107 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
             </Box>
           </Paper>
         </Grid>
+
+        {/* AI Metadata Suggestions */}
+        {createdSong && aiMetadata && (
+          <Grid item xs={12}>
+            <AIMetadataSuggestions
+              aiMetadata={aiMetadata}
+              song={createdSong}
+              onApply={async (options: ApplyAISuggestionsOptions) => {
+                if (!createdSong) return;
+
+                try {
+                  const updateData: Partial<Song> = {
+                    metadata: {
+                      ...createdSong.metadata,
+                    },
+                  };
+
+                  // Apply selected tags
+                  if (options.tagsToApply && options.tagsToApply.length > 0) {
+                    const existingTags = createdSong.metadata?.tags || [];
+                    const newTags = [...new Set([...existingTags, ...options.tagsToApply])];
+                    updateData.metadata!.tags = newTags;
+                    updateData.metadata!.suggestedTags = options.tagsToApply;
+                  } else if (options.applyAll && aiMetadata.suggestedTags) {
+                    const allTags = aiMetadata.suggestedTags.map(t => t.tag);
+                    const existingTags = createdSong.metadata?.tags || [];
+                    const newTags = [...new Set([...existingTags, ...allTags])];
+                    updateData.metadata!.tags = newTags;
+                    updateData.metadata!.suggestedTags = allTags;
+                  }
+
+                  // Apply BPM
+                  if (options.applyBPM && aiMetadata.bpm) {
+                    updateData.metadata!.bpm = aiMetadata.bpm.bpm;
+                  }
+
+                  // Apply Key
+                  if (options.applyKey && aiMetadata.key) {
+                    updateData.metadata!.key = aiMetadata.key.key;
+                  }
+
+                  // Store AI metadata
+                  updateData.metadata!.aiMetadata = aiMetadata;
+
+                  await updateSong(createdSong.id, updateData);
+                  
+                  // Refresh song
+                  const updatedSong = await getSong(createdSong.id);
+                  if (updatedSong) {
+                    setCreatedSong(updatedSong);
+                  }
+
+                  setAiApplied(true);
+                  showSuccess('AI suggestions applied successfully!');
+                } catch (error) {
+                  showError('Failed to apply AI suggestions. Please try again.');
+                  throw error;
+                }
+              }}
+              onUndo={async () => {
+                if (!createdSong) return;
+
+                try {
+                  // Remove AI-applied metadata
+                  const updateData: Partial<Song> = {
+                    metadata: {
+                      ...createdSong.metadata,
+                      aiMetadata: undefined,
+                      suggestedTags: undefined,
+                    },
+                  };
+
+                  // Remove AI-suggested tags from tags array
+                  if (createdSong.metadata?.suggestedTags) {
+                    const existingTags = createdSong.metadata?.tags || [];
+                    const suggestedTags = createdSong.metadata.suggestedTags;
+                    updateData.metadata!.tags = existingTags.filter(
+                      tag => !suggestedTags.includes(tag)
+                    );
+                  }
+
+                  await updateSong(createdSong.id, updateData);
+                  
+                  // Refresh song
+                  const updatedSong = await getSong(createdSong.id);
+                  if (updatedSong) {
+                    setCreatedSong(updatedSong);
+                  }
+
+                  setAiApplied(false);
+                  showSuccess('AI suggestions undone successfully!');
+                } catch (error) {
+                  showError('Failed to undo AI suggestions. Please try again.');
+                  throw error;
+                }
+              }}
+              applied={aiApplied}
+              loading={aiLoading}
+            />
+          </Grid>
+        )}
       </Grid>
 
       <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
@@ -400,6 +646,9 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
           {isCreating ? 'Adding Song...' : 'Add Song'}
         </Button>
       </Box>
+
+      {/* Toast Component */}
+      <ToastComponent />
     </Box>
   );
 
@@ -419,6 +668,13 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
         <DialogContent>
           {renderContent()}
         </DialogContent>
+        {!aiMetadata && !aiLoading && createdSong && (
+          <DialogActions>
+            <Button onClick={onClose} variant="contained">
+              Done
+            </Button>
+          </DialogActions>
+        )}
       </Dialog>
     );
   }

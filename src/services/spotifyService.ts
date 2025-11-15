@@ -27,10 +27,10 @@ export const getSpotifyAccessToken = async (): Promise<string> => {
     const getSpotifyToken = httpsCallable(functions as Functions, 'getSpotifyToken');
     const result = await getSpotifyToken({ idToken });
     
-    // @ts-ignore - The result data structure is determined by the Firebase function
-    return result.data.accessToken;
+    // Type assertion needed because Firebase Functions return type is generic
+    return (result.data as { accessToken: string }).accessToken;
   } catch (error) {
-    console.error('Error getting Spotify access token:', error);
+    // Error getting Spotify access token
     throw new Error('Failed to get Spotify access token');
   }
 };
@@ -57,7 +57,7 @@ export const getSpotifyRelease = async (releaseId: string) => {
     
     return await response.json();
   } catch (error) {
-    console.error('Error fetching Spotify release:', error);
+    // Error fetching Spotify release
     throw error;
   }
 };
@@ -93,10 +93,10 @@ export const publishToSpotify = async (releaseData: {
       releaseData
     });
     
-    // @ts-ignore - The result data structure is determined by the Firebase function
-    return result.data;
+    // Type assertion needed because Firebase Functions return type is generic
+    return result.data as unknown;
   } catch (error) {
-    console.error('Error publishing to Spotify:', error);
+    // Error publishing to Spotify
     throw error;
   }
 };
@@ -122,7 +122,7 @@ export const getSpotifyProfile = async () => {
     
     return await response.json();
   } catch (error) {
-    console.error('Error fetching Spotify profile:', error);
+    // Error fetching Spotify profile
     throw error;
   }
 }; 

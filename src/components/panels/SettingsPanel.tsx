@@ -136,8 +136,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
       setSuccess('Profile updated successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError('Failed to update profile');
-      console.error(err);
+      setError(getErrorMessage(err, 'Failed to update profile'));
     } finally {
       setLoading(false);
     }
@@ -154,13 +153,12 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
       setDeleteConfirmOpen(false);
       // Redirect will be handled by AuthContext
     } catch (err) {
-      setError('Failed to delete account');
-      console.error(err);
+      setError(getErrorMessage(err, 'Failed to delete account'));
       setLoading(false);
     }
   };
 
-  const handleSettingChange = (key: keyof ThemeSettings, value: any) => {
+  const handleSettingChange = (key: keyof ThemeSettings, value: ThemeSettings[keyof ThemeSettings]) => {
     setLocalSettings({
       ...localSettings,
       [key]: value,
@@ -173,8 +171,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
       setSuccess('Settings saved successfully');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError('Failed to save settings');
-      console.error(err);
+      setError(getErrorMessage(err, 'Failed to save settings'));
     }
   };
 

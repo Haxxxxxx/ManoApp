@@ -66,6 +66,8 @@ service cloud.firestore {
     }
 
     // Songs collection
+    // Note: AI metadata fields (metadata.aiMetadata, metadata.suggestedTags) are included
+    // in the metadata object and are covered by the update rules below
     match /songs/{songId} {
       allow read: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
@@ -87,6 +89,7 @@ service cloud.firestore {
         )
       );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // Allow updates including AI metadata fields (metadata.aiMetadata, metadata.suggestedTags)
       allow update, delete: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         exists(/databases/$(database)/documents/trips/$(resource.data.tripId)) &&
@@ -113,6 +116,56 @@ service cloud.firestore {
     match /userSettings/{userId} {
       allow read: if isAuthenticated();
       allow write: if isOwner(userId);
+    }
+
+    // Releases collection
+    match /releases/{releaseId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        exists(/databases/$(database)/documents/trips/$(resource.data.projectId)) &&
+        (
+          get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.userId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.collaborators
+        )
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        exists(/databases/$(database)/documents/trips/$(resource.data.projectId)) &&
+        (
+          get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.userId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.collaborators
+        )
+      );
+    }
+
+    // Comments collection
+    match /comments/{commentId} {
+      allow read: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        exists(/databases/$(database)/documents/trips/$(resource.data.projectId)) &&
+        (
+          get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.userId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.collaborators
+        )
+      );
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.authorId == request.auth.uid ||
+        exists(/databases/$(database)/documents/trips/$(resource.data.projectId)) &&
+        (
+          get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.userId == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.collaborators
+        )
+      );
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }
 }

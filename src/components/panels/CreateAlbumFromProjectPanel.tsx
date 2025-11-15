@@ -36,7 +36,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Trip } from '../../types/trip';
 import { Song } from '../../types/song';
 import { createAlbum } from '../../services/firebaseService';
-import { audioService } from '../../services/audioService';
+import { useSongs } from '../../hooks/useSongs';
+import { getErrorMessage } from '../../utils/storageHelpers';
+import { formatDurationFromString, parseDurationToSeconds } from '../../utils/formatters';
 import type { AlbumSong } from '../../types/album';
 
 interface CreateAlbumFromProjectPanelProps {
@@ -44,19 +46,6 @@ interface CreateAlbumFromProjectPanelProps {
   onClose: () => void;
   onAlbumCreated?: (albumId: string) => void;
 }
-
-// Add a helper function to format duration
-const formatDuration = (duration: string | number): string => {
-  if (typeof duration === 'string') {
-    // If it's already in MM:SS format, return as is
-    if (duration.includes(':')) return duration;
-    
-    // If it's a string number, convert to number first
-    return audioService.formatDuration(Number(duration));
-  }
-  // If it's a number, format it
-  return audioService.formatDuration(duration);
-};
 
 const CreateAlbumFromProjectPanel: React.FC<CreateAlbumFromProjectPanelProps> = ({
   trip,
@@ -74,20 +63,26 @@ const CreateAlbumFromProjectPanel: React.FC<CreateAlbumFromProjectPanelProps> = 
     coverImage: null as string | null
   });
   const [selectedSongs, setSelectedSongs] = useState<Song[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  // Initialize with all project songs
+  // Use useSongs hook for proper data management
+  const { songs, loading: isLoading, error: songsError } = useSongs({
+    tripId: trip?.id,
+    autoFetch: true
+  });
+
+  // Update selected songs when songs are loaded
   useEffect(() => {
-    console.log('Trip data received:', trip);
-    if (trip && trip.songs && Array.isArray(trip.songs)) {
-      console.log('Setting songs from trip:', trip.songs);
-      setSelectedSongs(trip.songs);
-    } else {
-      console.warn('No songs found in trip data or invalid format:', trip);
-      setError('No songs found in project');
+    if (songs.length > 0) {
+      setSelectedSongs(songs);
+      setLocalError(null);
+    } else if (songs.length === 0 && !isLoading) {
+      setLocalError('No songs found in project');
     }
-  }, [trip]);
+  }, [songs, isLoading]);
+
+  // Combine errors
+  const error = localError || (songsError ? getErrorMessage(songsError, 'Failed to load songs') : null);
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -108,43 +103,29 @@ const CreateAlbumFromProjectPanel: React.FC<CreateAlbumFromProjectPanelProps> = 
 
   const handleSaveAlbum = async () => {
     if (!currentUser) {
-      setError('You must be logged in to create an album');
+      setLocalError('You must be logged in to create an album');
       return;
     }
 
     if (!selectedSongs.length) {
-      setError('Please add at least one song to the album');
+      setLocalError('Please add at least one song to the album');
       return;
     }
 
     if (!albumData.title.trim()) {
-      setError('Please enter an album title');
+      setLocalError('Please enter an album title');
       return;
     }
 
     try {
       setIsLoading(true);
-      setError(null);
+      setLocalError(null);
 
-      console.log('Creating album with songs:', selectedSongs);
+      // Creating album with selected songs
 
       const albumSongs: AlbumSong[] = selectedSongs.map(song => {
-        // Parse duration properly
-        let durationInSeconds: number;
-        if (typeof song.duration === 'number') {
-          durationInSeconds = song.duration;
-        } else if (typeof song.duration === 'string') {
-          const [minutes, seconds] = song.duration.split(':').map(Number);
-          if (!isNaN(minutes) && !isNaN(seconds)) {
-            durationInSeconds = minutes * 60 + seconds;
-          } else {
-            // If parsing fails, default to 0 or handle the error
-            console.warn(`Invalid duration format for song ${song.title}:`, song.duration);
-            durationInSeconds = 0;
-          }
-        } else {
-          durationInSeconds = 0;
-        }
+        // Parse duration using utility function for consistency
+        const durationInSeconds = parseDurationToSeconds(song.duration);
 
         return {
           id: song.id,
@@ -178,17 +159,12 @@ const CreateAlbumFromProjectPanel: React.FC<CreateAlbumFromProjectPanelProps> = 
 
       onClose();
     } catch (err) {
-      console.error('Error creating album:', err);
-      setError('Failed to create album. Please try again.');
+      setLocalError(getErrorMessage(err, 'Failed to create album. Please try again.'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Add debug output for current state
-  useEffect(() => {
-    console.log('Current selected songs:', selectedSongs);
-  }, [selectedSongs]);
 
   return (
     <Dialog
@@ -308,7 +284,7 @@ const CreateAlbumFromProjectPanel: React.FC<CreateAlbumFromProjectPanelProps> = 
                                         {song.artist}
                                       </Typography>
                                       <Typography variant="body2" color="text.secondary" component="span">
-                                        {formatDuration(song.duration)}
+                                        {formatDurationFromString(song.duration)}
                                       </Typography>
                                     </Box>
                                   }

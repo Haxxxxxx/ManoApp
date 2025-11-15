@@ -1,8 +1,11 @@
-import React from 'react';
-import { Box, Typography, Grid, Paper, Button, CircularProgress } from '@mui/material';
+import React, { useState, useMemo } from 'react';
+import { Box, Typography, Grid, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FolderIcon from '@mui/icons-material/Folder';
 import ProjectCard from './ProjectCard';
+import EmptyState from '../common/EmptyState';
+import SkeletonLoader from '../common/SkeletonLoader';
+import SearchBar from '../common/SearchBar';
 import type { Trip } from '../../types/trip';
 
 interface ProjectsSectionProps {
@@ -22,9 +25,23 @@ const ProjectsSection: React.FC<ProjectsSectionProps> = ({
   onDeleteTrip, 
   onCreateNew 
 }: ProjectsSectionProps) => {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredTrips = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return trips;
+    }
+    const query = searchQuery.toLowerCase();
+    return trips.filter(trip => 
+      trip.name.toLowerCase().includes(query) ||
+      trip.description?.toLowerCase().includes(query) ||
+      trip.tags?.some(tag => tag.toLowerCase().includes(query))
+    );
+  }, [trips, searchQuery]);
+
   return (
     <Box sx={{ mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
         <Typography variant="h5" fontWeight="bold">
           {title}
         </Typography>
@@ -33,53 +50,38 @@ const ProjectsSection: React.FC<ProjectsSectionProps> = ({
           color="primary"
           endIcon={<AddIcon />}
           onClick={onCreateNew}
+          aria-label={`Create new ${title.toLowerCase()}`}
         >
           Create New
         </Button>
       </Box>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress />
+      {!loading && trips.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <SearchBar
+            placeholder={`Search ${title.toLowerCase()}...`}
+            onSearch={setSearchQuery}
+            aria-label={`Search ${title.toLowerCase()}`}
+            size="small"
+          />
         </Box>
-      ) : trips.length === 0 ? (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 4,
-            borderRadius: 3,
-            bgcolor: 'background.paper',
-            border: '1px dashed',
-            borderColor: 'divider',
-            textAlign: 'center',
-            mb: 4
-          }}
-        >
-          <FolderIcon sx={{ fontSize: 48, color: 'text.secondary', opacity: 0.5, mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
-            No projects yet
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Create your first project to get started with music management.
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={onCreateNew}
-            sx={{ 
-              borderRadius: 2,
-              boxShadow: '0px 4px 12px rgba(29, 185, 84, 0.2)',
-              '&:hover': {
-                boxShadow: '0px 6px 16px rgba(29, 185, 84, 0.3)',
-              }
-            }}
-          >
-            Create Project
-          </Button>
-        </Paper>
+      )}
+
+      {loading ? (
+        <SkeletonLoader variant="card" count={6} />
+      ) : filteredTrips.length === 0 ? (
+        <EmptyState
+          icon={<FolderIcon sx={{ fontSize: 48, color: 'primary.main' }} />}
+          title={searchQuery ? `No projects found for "${searchQuery}"` : "No projects yet"}
+          description={searchQuery 
+            ? "Try adjusting your search terms or create a new project."
+            : "Create your first project to get started with music management. Organize your songs, collaborate with others, and bring your musical ideas to life."}
+          actionLabel={searchQuery ? undefined : "Create Project"}
+          onAction={searchQuery ? undefined : onCreateNew}
+        />
       ) : (
         <Grid container spacing={3}>
-          {trips.map((trip) => (
+          {filteredTrips.map((trip) => (
             <Grid item xs={12} sm={6} md={4} key={trip.id}>
               <ProjectCard
                 trip={trip}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   Box, 
   Typography, 
@@ -37,10 +37,13 @@ import {
   Container
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { createTrip, createPlaylist, getAnalytics, createSong, deleteTrip } from '../services/firebaseService';
+import { createTrip, createPlaylist, getAnalytics, createSong, deleteTrip, getSongCount } from '../services/firebaseService';
 import type { Trip, TripStatus } from '../types/trip';
-import { useAuth } from '../hooks';
+import { useAuth } from '../contexts/AuthContext';
 import { useTrips } from '../contexts/TripContext';
+import { useToast } from '../hooks/useToast';
+import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '../hooks/useKeyboardShortcuts';
+import { createDevPlaceholderProject, isDevPlaceholder } from '../utils/devPlaceholder';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import AddIcon from '@mui/icons-material/Add';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -51,8 +54,10 @@ import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AlbumIcon from '@mui/icons-material/Album';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
-import { useDropzone } from 'react-dropzone';
 import { uploadMusicFile } from '../services/storageService';
+import { removeFileExtension } from '../utils/formatters';
+import { STORAGE_KEYS, storageHelpers, getErrorMessage } from '../utils/storageHelpers';
+import { SPECIAL_PROJECT_IDS } from '../utils/constants';
 import type { Song } from '../types/song';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -65,10 +70,17 @@ import ProjectsSection from './dashboard/ProjectsSection';
 import DashboardDialogs from './dashboard/DashboardDialogs';
 import LocalFilesSection from './dashboard/LocalFilesSection';
 
+interface ActivityItem {
+  id: string;
+  type: string;
+  description: string;
+  timestamp: Date;
+}
+
 interface AnalyticsData {
   totalSongs: number;
   totalProjects: number;
-  recentActivity: any[];
+  recentActivity: ActivityItem[];
   totalPlaylists: number;
   totalCollaborators: number;
   projectsByMonth: { [key: string]: number };
@@ -132,8 +144,17 @@ interface ProjectsSectionProps {
 const DashboardView: React.FC = () => {
   const theme = useTheme();
   const { trips, sharedTrips, loading, error: tripsError, addTrip, removeTrip, refreshTrips } = useTrips();
+  
+  // Add dev placeholder project in development mode
+  const displayTrips = useMemo(() => {
+    const allTrips = [...trips];
+    if (import.meta.env.DEV) {
+      allTrips.unshift(createDevPlaceholderProject());
+    }
+    return allTrips;
+  }, [trips]);
   const [localFiles, setLocalFiles] = useState<Song[]>([]);
-  const [localProjectId] = useState<string>('local-songs-project');
+  const [localProjectId] = useState<string>(SPECIAL_PROJECT_IDS.LOCAL_SONGS);
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -151,6 +172,7 @@ const DashboardView: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { showSuccess, showError, ToastComponent } = useToast();
   const [showFolderDialog, setShowFolderDialog] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<string>('');
   const [scanningFiles, setScanningFiles] = useState(false);
@@ -161,19 +183,71 @@ const DashboardView: React.FC = () => {
   const [showPathDialog, setShowPathDialog] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
 
-  // Calculate statistics
-  const totalProjects = trips.length + (sharedTrips?.length || 0);
-  const totalSongs = trips.reduce((acc, trip) => acc + (trip.songs?.length || 0), 0) +
-    (sharedTrips?.reduce((acc, trip) => acc + (trip.songs?.length || 0), 0) || 0);
-  const activeProjects = trips.filter(trip => trip.status === 'active' as TripStatus).length +
-    (sharedTrips?.filter(trip => trip.status === 'active' as TripStatus).length || 0);
-  const totalCollaborators = trips.reduce((acc, trip) => acc + (trip.collaborators?.length || 0), 0) +
-    (sharedTrips?.reduce((acc, trip) => acc + (trip.collaborators?.length || 0), 0) || 0);
+  // State for song counts (fetched asynchronously)
+  const [songCounts, setSongCounts] = useState<Record<string, number>>({});
+  const [totalSongsCount, setTotalSongsCount] = useState(0);
 
-  const handleTripClick = (trip: Trip) => {
+  // Fetch song counts for all trips
+  useEffect(() => {
+    const fetchSongCounts = async () => {
+      const allTrips = [...trips, ...(sharedTrips || [])];
+      const counts: Record<string, number> = {};
+      let total = 0;
+
+      for (const trip of allTrips) {
+        try {
+          const count = await getSongCount(trip.id);
+          counts[trip.id] = count;
+          total += count;
+        } catch (error) {
+          // Silently fail for individual trips
+          counts[trip.id] = 0;
+        }
+      }
+
+      setSongCounts(counts);
+      setTotalSongsCount(total);
+    };
+
+    if (trips.length > 0 || (sharedTrips && sharedTrips.length > 0)) {
+      fetchSongCounts();
+    } else {
+      setSongCounts({});
+      setTotalSongsCount(0);
+    }
+  }, [trips, sharedTrips]);
+
+  // Calculate statistics with memoization (exclude dev placeholder)
+  const totalProjects = useMemo(() => {
+    const realTrips = trips.length;
+    const realSharedTrips = sharedTrips?.length || 0;
+    return realTrips + realSharedTrips;
+  }, [trips.length, sharedTrips?.length]);
+
+  const activeProjects = useMemo(() => 
+    trips.filter(trip => trip.status === 'active' as TripStatus).length +
+    (sharedTrips?.filter(trip => trip.status === 'active' as TripStatus).length || 0),
+    [trips, sharedTrips]
+  );
+
+  const totalCollaborators = useMemo(() => 
+    trips.reduce((acc, trip) => acc + (trip.collaborators?.length || 0), 0) +
+    (sharedTrips?.reduce((acc, trip) => acc + (trip.collaborators?.length || 0), 0) || 0),
+    [trips, sharedTrips]
+  );
+
+  // totalSongs is already a state variable (totalSongsCount), no need to memoize
+  const totalSongs = totalSongsCount;
+
+  const handleTripClick = useCallback((trip: Trip) => {
+    // Check if it's a dev placeholder
+    if (import.meta.env.DEV && trip.id === 'dev-placeholder-project') {
+      navigate(`/trip/${trip.id}`);
+      return;
+    }
     setSelectedTripId(trip.id);
     navigate(`/trip/${trip.id}`);
-  };
+  }, [navigate]);
 
   const handleCreateProject = async (project: Omit<Trip, 'id'>) => {
     if (!user) return;
@@ -184,7 +258,7 @@ const DashboardView: React.FC = () => {
         name: project.name,
         description: project.description || '',
         userId: user.uid,
-        songs: project.songs || [],
+        songs: [], // Songs are stored in songs collection, not in trip.songs
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         collaborators: [],
@@ -199,8 +273,7 @@ const DashboardView: React.FC = () => {
       // Navigate to the new project
       navigate(`/trip/${newTrip.id}`);
     } catch (error) {
-      console.error('Error handling project creation:', error);
-      setError('Failed to create project. Please try again.');
+      setError(getErrorMessage(error, 'Failed to create project. Please try again.'));
     } finally {
       setCreating(false);
     }
@@ -220,7 +293,7 @@ const DashboardView: React.FC = () => {
       const data = await getAnalytics(user?.uid || '');
       setAnalyticsData(data);
     } catch (err) {
-      console.error('Error fetching analytics:', err);
+      setError(getErrorMessage(err, 'Failed to fetch analytics'));
       setError('Failed to load analytics data');
     }
   };
@@ -268,14 +341,14 @@ const DashboardView: React.FC = () => {
               file.name.toLowerCase().endsWith('.ogg') || 
               file.name.toLowerCase().endsWith('.m4a')) {
             
-            console.log(`Uploading audio file: ${file.name}, type: ${fileType}`);
+            // Uploading audio file
             
             // Upload the audio file
             const filePath = await uploadMusicFile(file, newTrip.id);
             
             // Create a new song entry
             const newSong: Omit<Song, 'id'> = {
-              title: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
+              title: removeFileExtension(file.name),
               artist: user.email?.split('@')[0] || 'Unknown Artist',
               duration: '0:00', // Default duration, would need audio processing to get actual duration
               filePath,
@@ -289,12 +362,11 @@ const DashboardView: React.FC = () => {
             // Save the song to Firestore
             await createSong(newTrip.id, newSong);
           } else {
-            console.warn(`Unsupported file type: ${fileType} for file ${file.name}`);
+            // Unsupported file type - skipping
             setError(`Unsupported file type: ${fileType} for file ${file.name}`);
           }
         } catch (fileError) {
-          console.error(`Error processing file ${file.name}:`, fileError);
-          setError(`Error processing file ${file.name}: ${fileError instanceof Error ? fileError.message : 'Unknown error'}`);
+          setError(getErrorMessage(fileError, `Error processing file ${file.name}`));
         }
       }
       
@@ -310,26 +382,15 @@ const DashboardView: React.FC = () => {
       // Close the dialog
       setShowUploadDialog(false);
     } catch (err) {
-      console.error('Error uploading files:', err);
-      setError(`Failed to upload files: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      const errorMsg = getErrorMessage(err, 'Failed to upload files');
+      setError(errorMsg);
+      showError(errorMsg);
     } finally {
       setUploading(false);
     }
   };
 
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      'audio/*': ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'],
-      'application/*': ['.flp']
-    },
-    onDrop
-  });
-
-  // Use the dropzone props in the upload dialog
-  const uploadDialogProps = {
-    ...getRootProps(),
-    ...getInputProps()
-  };
+  // Note: DashboardDialogs will create its own dropzone to avoid ref issues
 
   const handleCreatePlaylist = async () => {
     if (!user) {
@@ -372,7 +433,7 @@ const DashboardView: React.FC = () => {
       setPlaylistVisibility('private');
       setShowPlaylistDialog(false);
     } catch (err) {
-      console.error('Error creating playlist:', err);
+      setError(getErrorMessage(err, 'Failed to create playlist'));
       setError('Failed to create playlist. Please try again.');
     } finally {
       setCreating(false);
@@ -384,6 +445,11 @@ const DashboardView: React.FC = () => {
   };
 
   const handleDeleteTrip = (trip: Trip) => {
+    // Prevent deletion of dev placeholder
+    if (import.meta.env.DEV && trip.id === 'dev-placeholder-project') {
+      showError('Cannot delete dev placeholder project');
+      return;
+    }
     setTripToDelete(trip);
     setDeleteConfirmOpen(true);
   };
@@ -410,9 +476,12 @@ const DashboardView: React.FC = () => {
       removeTrip(tripToDelete.id);
       
       setDeleteConfirmOpen(false);
+      setTripToDelete(null);
+      showSuccess('Project deleted successfully');
     } catch (error) {
-      console.error('Error in delete process:', error);
-      setError(error instanceof Error ? error.message : 'Failed to delete project. Please try again.');
+      const errorMsg = getErrorMessage(error, 'Failed to delete project. Please try again.');
+      setError(errorMsg);
+      showError(errorMsg);
     } finally {
       setDeletingTripId(null);
       setTripToDelete(null);
@@ -480,8 +549,7 @@ const DashboardView: React.FC = () => {
       setLocalFiles(prev => [...prev, ...songs]);
       setShowPathDialog(false);
       setFolderPath('');
-    } catch (error: any) {
-      console.error('Error processing folder:', error);
+    } catch (error: unknown) {
       setError('Failed to process folder. Please try again.');
     } finally {
       setScanningFiles(false);
@@ -521,7 +589,7 @@ const DashboardView: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('Error selecting folder:', error);
+      setError(getErrorMessage(error, 'Failed to select folder'));
       setError('Failed to select folder. Please try again.');
     }
   };
@@ -553,7 +621,7 @@ const DashboardView: React.FC = () => {
     try {
       const songs = files.map(file => ({
         id: `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        title: file.name.replace(/\.[^/.]+$/, ""),
+        title: removeFileExtension(file.name),
         artist: 'Unknown Artist',
         duration: '0:00',
         filePath: URL.createObjectURL(file),
@@ -570,32 +638,32 @@ const DashboardView: React.FC = () => {
 
       const newLocalFiles = [...localFiles, ...songs];
       setLocalFiles(newLocalFiles);
-      localStorage.setItem('localFiles', JSON.stringify(newLocalFiles));
+      storageHelpers.setItem(STORAGE_KEYS.LOCAL_FILES, newLocalFiles);
       setShowFolderDialog(false);
+      showSuccess(`Successfully added ${files.length} local file${files.length !== 1 ? 's' : ''}!`);
     } catch (error) {
-      console.error('Error creating local trip:', error);
-      setError('Failed to create local trip');
+      const errorMsg = getErrorMessage(error, 'Failed to create local trip');
+      setError(errorMsg);
+      showError(errorMsg);
     }
   };
 
-  // Add useEffect to load local files from localStorage on component mount
+  // Load local files from localStorage on component mount
   useEffect(() => {
-    const savedLocalFiles = localStorage.getItem('localFiles');
+    const savedLocalFiles = storageHelpers.getItem<typeof localFiles>(STORAGE_KEYS.LOCAL_FILES);
     if (savedLocalFiles) {
-      setLocalFiles(JSON.parse(savedLocalFiles));
+      setLocalFiles(savedLocalFiles);
     }
     
     // Create a local project ID if it doesn't exist
-    const savedLocalProjectId = localStorage.getItem('localProjectId');
-    if (savedLocalProjectId) {
-      localStorage.setItem('localProjectId', savedLocalProjectId);
-    } else {
-      const newLocalProjectId = 'local-songs-project';
-      localStorage.setItem('localProjectId', newLocalProjectId);
+    const savedLocalProjectId = storageHelpers.getItem<string>(STORAGE_KEYS.LOCAL_PROJECT_ID);
+    if (!savedLocalProjectId) {
+      const newLocalProjectId = SPECIAL_PROJECT_IDS.LOCAL_SONGS;
+      storageHelpers.setItem(STORAGE_KEYS.LOCAL_PROJECT_ID, newLocalProjectId);
     }
   }, []);
 
-  // Update the cleanup function to handle file URLs
+  // Cleanup function to handle file URLs
   useEffect(() => {
     return () => {
       // Revoke object URLs when component unmounts
@@ -607,19 +675,10 @@ const DashboardView: React.FC = () => {
     };
   }, [localFiles]);
 
-  // Add this useEffect after the other useEffects
-  useEffect(() => {
-    // Load local files from localStorage on mount
-    const savedLocalFiles = localStorage.getItem('localFiles');
-    if (savedLocalFiles) {
-      setLocalFiles(JSON.parse(savedLocalFiles));
-    }
-  }, []);
-
   const handleDeleteLocalFile = (songId: string) => {
     const updatedFiles = localFiles.filter(song => song.id !== songId);
     setLocalFiles(updatedFiles);
-    localStorage.setItem('localFiles', JSON.stringify(updatedFiles));
+    storageHelpers.setItem(STORAGE_KEYS.LOCAL_FILES, updatedFiles);
   };
 
   useEffect(() => {
@@ -638,7 +697,7 @@ const DashboardView: React.FC = () => {
           topCollaborators: []
         });
       } catch (error) {
-        console.error('Error fetching analytics:', error);
+        // Error fetching analytics
       }
     };
 
@@ -649,9 +708,38 @@ const DashboardView: React.FC = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Dashboard
+      <Box
+        sx={{
+          mb: 4,
+          position: 'relative',
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            bottom: -8,
+            left: 0,
+            width: '60px',
+            height: '4px',
+            background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            borderRadius: 2,
+          }
+        }}
+      >
+        <Typography 
+          variant="h4" 
+          component="h1" 
+          gutterBottom
+          sx={{
+            fontWeight: 700,
+            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mb: 2,
+          }}
+        >
+          Dashboard
         </Typography>
+      </Box>
 
       <StatisticsCards
         totalProjects={totalProjects}
@@ -672,7 +760,7 @@ const DashboardView: React.FC = () => {
       <Box sx={{ mt: 4 }}>
         <ProjectsSection
           title="My Projects"
-          trips={trips}
+          trips={displayTrips}
           loading={loading}
           onTripClick={(trip: Trip) => handleTripClick(trip)}
           onDeleteTrip={handleDeleteTrip}
@@ -710,8 +798,9 @@ const DashboardView: React.FC = () => {
         accept="audio/*"
       />
 
+      <ToastComponent />
+
       <DashboardDialogs
-        {...uploadDialogProps}
         showUploadDialog={showUploadDialog}
         setShowUploadDialog={setShowUploadDialog}
         uploading={uploading}
@@ -743,6 +832,22 @@ const DashboardView: React.FC = () => {
         setFolderPath={setFolderPath}
         handlePathSubmit={handlePathSubmit}
       />
+
+      {/* Create Project Dialog */}
+      {openDialog && (
+        <EmptyProjectPanel
+          tripId="new"
+          onClose={() => setOpenDialog(false)}
+          onProjectCreated={(project) => {
+            // EmptyProjectPanel already creates the project and navigates
+            // We just need to refresh the trips list and close the dialog
+            refreshTrips();
+            setOpenDialog(false);
+          }}
+          isDialog={true}
+          mode="project"
+        />
+      )}
     </Container>
   );
 };

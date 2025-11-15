@@ -32,7 +32,9 @@ import {
 } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArtistProfile } from '../../types/artist';
+import type { ActivityItem } from '../../types/activity';
 import { inviteCollaborator, removeCollaborator } from '../../services/firebaseService';
+import { getErrorMessage } from '../../utils/storageHelpers';
 
 interface CollaboratorsPanelProps {
   tripId: string;
@@ -46,9 +48,9 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   onCollaboratorsChange,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [allArtists, setAllArtists] = useState<any[]>([]);
-  const [potentialCollaborators, setPotentialCollaborators] = useState<any[]>([]);
-  const [currentCollaborators, setCurrentCollaborators] = useState<any[]>([]);
+  const [allArtists, setAllArtists] = useState<ArtistProfile[]>([]);
+  const [potentialCollaborators, setPotentialCollaborators] = useState<ArtistProfile[]>([]);
+  const [currentCollaborators, setCurrentCollaborators] = useState<ArtistProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +67,7 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
           setLocalCollaborators(trip.collaborators || []);
         }
       } catch (err) {
-        console.error('Error fetching trip:', err);
+        // Error fetching trip
         setError('Failed to load trip data');
       }
     };
@@ -95,7 +97,7 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         setPotentialCollaborators(potential);
       } catch (err) {
         setError('Failed to load artists');
-        console.error('Error fetching artists:', err);
+        // Error fetching artists
       } finally {
         setLoading(false);
       }
@@ -127,7 +129,7 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       setPotentialCollaborators(filteredResults);
     } catch (err) {
       setError('Failed to search for collaborators');
-      console.error('Search error:', err);
+      // Search error
     } finally {
       setSearchLoading(false);
     }
@@ -161,7 +163,7 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       
       setSuccess('Collaborator added successfully');
     } catch (error) {
-      console.error('Error adding collaborator:', error);
+      const errorMessage = getErrorMessage(error, 'Failed to add collaborator');
       if (error instanceof Error && error.message === 'Artist is already a collaborator') {
         // If the artist is already a collaborator, move them to the current list
         const artistToMove = allArtists.find(a => a.id === collaborator.id);
@@ -170,7 +172,7 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
           setPotentialCollaborators(prev => prev.filter(c => c.id !== collaborator.id));
         }
       } else {
-        setError(error instanceof Error ? error.message : 'Failed to add collaborator');
+        setError(errorMessage);
       }
     }
   };
@@ -187,8 +189,7 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
         onCollaboratorsChange(updatedCollaborators);
       }
     } catch (error) {
-      console.error('Error removing collaborator:', error);
-      setError(error instanceof Error ? error.message : 'Failed to remove collaborator');
+      setError(getErrorMessage(error, 'Failed to remove collaborator'));
     }
   };
 

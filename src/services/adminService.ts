@@ -13,19 +13,18 @@ export const adminUploadFile = async (file: File, path: string): Promise<string>
     
     return new Promise((resolve, reject) => {
       blobStream.on('error', (error) => {
-        console.error('Error uploading file using Admin SDK:', error);
+        // Error uploading file using Admin SDK
         reject(error);
       });
       
       blobStream.on('finish', () => {
         blob.getSignedUrl({
           action: 'read',
-          expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+          expires: Date.now() + TIME_CONSTANTS.ONE_WEEK,
         }).then(([url]) => {
-          console.log('File uploaded successfully using Admin SDK:', url);
           resolve(url);
         }).catch((error) => {
-          console.error('Error getting signed URL:', error);
+          // Error getting signed URL
           reject(error);
         });
       });
@@ -33,7 +32,7 @@ export const adminUploadFile = async (file: File, path: string): Promise<string>
       blobStream.end(file.arrayBuffer());
     });
   } catch (error) {
-    console.error('Error uploading file using Admin SDK:', error);
+    // Error uploading file using Admin SDK
     throw error;
   }
 };
@@ -42,22 +41,22 @@ export const adminDeleteFile = async (path: string): Promise<void> => {
   try {
     const bucket = adminStorage.bucket();
     await bucket.file(path).delete();
-    console.log('File deleted successfully using Admin SDK:', path);
+    // File deleted successfully
   } catch (error) {
-    console.error('Error deleting file using Admin SDK:', error);
+    // Error deleting file using Admin SDK
     throw error;
   }
 };
 
 // Functions operations using Admin SDK
-export const adminCallFunction = async (functionName: string, data?: any) => {
+export const adminCallFunction = async (functionName: string, data?: unknown) => {
   try {
     // Note: Admin SDK doesn't support direct function calls like the client SDK
     // You'll need to use HTTP calls or the Firebase Admin SDK's REST API
-    console.warn('Direct function calls are not supported in the Admin SDK. Please use HTTP calls instead.');
+    // Direct function calls are not supported in the Admin SDK
     throw new Error('Direct function calls are not supported in the Admin SDK');
   } catch (error) {
-    console.error(`Error calling function ${functionName} using Admin SDK:`, error);
+    // Error calling function using Admin SDK
     throw error;
   }
 };
@@ -68,24 +67,24 @@ export const adminGetDocument = async (collection: string, docId: string) => {
     const docRef = adminDb.collection(collection).doc(docId);
     const doc = await docRef.get();
     if (!doc.exists) {
-      console.log(`Document ${docId} does not exist in collection ${collection}`);
+      // Document does not exist
       return null;
     }
-    console.log(`Document ${docId} retrieved successfully using Admin SDK`);
+    // Document retrieved successfully
     return doc.data();
   } catch (error) {
-    console.error(`Error getting document ${docId} using Admin SDK:`, error);
+    // Error getting document using Admin SDK
     throw error;
   }
 };
 
-export const adminSetDocument = async (collection: string, docId: string, data: any) => {
+export const adminSetDocument = async (collection: string, docId: string, data: Record<string, unknown>) => {
   try {
     const docRef = adminDb.collection(collection).doc(docId);
     await docRef.set(data);
-    console.log(`Document ${docId} set successfully using Admin SDK`);
+    // Document set successfully
   } catch (error) {
-    console.error(`Error setting document ${docId} using Admin SDK:`, error);
+    // Error setting document using Admin SDK
     throw error;
   }
 }; 

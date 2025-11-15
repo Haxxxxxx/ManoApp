@@ -1,3 +1,6 @@
+import { AIMetadata } from './ai';
+import { Stem } from './stem';
+
 export interface Song {
   id: string;
   title: string;
@@ -11,6 +14,8 @@ export interface Song {
   userId: string;
   metadata?: SongMetadata;
   notes?: string;
+  /** Array of stems (multitrack audio files) */
+  stems?: Stem[];
 }
 
 export type SongMetadata = {
@@ -26,4 +31,8 @@ export type SongMetadata = {
   _originalFileName?: string;
   _fileSize?: number;
   _lastModified?: number;
+  /** AI-generated metadata suggestions */
+  aiMetadata?: AIMetadata;
+  /** Suggested tags from AI (array of tag strings) */
+  suggestedTags?: string[];
 }; 

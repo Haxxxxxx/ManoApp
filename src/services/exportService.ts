@@ -1,7 +1,10 @@
-import { Song } from '../types';
+import { Song } from '../types/index';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Album } from '../types/album';
+import { sanitizeFilename } from '../utils/formatters';
+import { fetchAudioBlob, createSongMetadata } from '../utils/fileHelpers';
+import { getErrorMessage } from '../utils/storageHelpers';
 
 /**
  * Export a song for SoundCloud with all metadata
@@ -9,66 +12,22 @@ import { Album } from '../types/album';
  * @returns A promise that resolves when the export is complete
  */
 export const exportForSoundCloud = async (song: Song): Promise<void> => {
-  console.log('Starting export process for song:', song);
-
   if (!song.filePath) {
-    console.error('No file path available for song:', song);
     throw new Error('No audio file available for export');
   }
 
   try {
-    console.log('Creating zip file...');
     const zip = new JSZip();
     
-    // Handle both local and remote file URLs
-    let audioBlob: Blob;
-    if (song.filePath.startsWith('blob:') || song.filePath.startsWith('data:')) {
-      // For blob URLs, we need to fetch them directly
-      console.log('Handling blob URL...');
-      const response = await fetch(song.filePath);
-      audioBlob = await response.blob();
-    } else if (song.filePath.startsWith('http')) {
-      // For remote URLs (like Firebase Storage)
-      console.log('Handling remote URL...');
-      const response = await fetch(song.filePath);
-      if (!response.ok) {
-        throw new Error(`Failed to download audio file: ${response.status} ${response.statusText}`);
-      }
-      audioBlob = await response.blob();
-    } else {
-      // For local file paths
-      console.log('Handling local file...');
-      const response = await fetch(song.filePath);
-      audioBlob = await response.blob();
-    }
-    
-    console.log('Audio blob size:', audioBlob.size);
-    console.log('Audio blob type:', audioBlob.type);
-    
-    if (audioBlob.size === 0) {
-      throw new Error('Downloaded audio file is empty');
-    }
+    // Fetch audio blob using utility function
+    const audioBlob = await fetchAudioBlob(song.filePath);
 
     // Sanitize filename
-    const filename = `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`;
-    console.log('Adding audio file to zip as:', filename);
+    const filename = `${sanitizeFilename(song.title)}.mp3`;
     zip.file(filename, audioBlob);
     
     // Create metadata file
-    console.log('Creating metadata...');
-    const metadata = {
-      title: song.title,
-      artist: song.artist,
-      description: `${song.title} by ${song.artist}`,
-      genre: song.metadata?.genre?.[0] || '',
-      tags: song.metadata?.tags?.join(', ') || '',
-      bpm: song.metadata?.bpm || '',
-      key: song.metadata?.key || '',
-      releaseDate: song.metadata?.releaseDate || '',
-      notes: song.notes || ''
-    };
-    
-    console.log('Metadata prepared:', metadata);
+    const metadata = createSongMetadata(song);
     
     // Add metadata as JSON
     zip.file('metadata.json', JSON.stringify(metadata, null, 2));
@@ -99,10 +58,8 @@ Instructions:
 6. Click "Save" to publish your track
 `;
     
-    console.log('Adding instruction file to zip...');
     zip.file('soundcloud_instructions.txt', metadataText);
     
-    console.log('Generating final zip file...');
     const content = await zip.generateAsync({ 
       type: 'blob',
       compression: 'DEFLATE',
@@ -111,22 +68,15 @@ Instructions:
       }
     });
     
-    console.log('Zip file generated, size:', content.size);
-    
     if (content.size === 0) {
       throw new Error('Generated zip file is empty');
     }
 
-    console.log('Saving zip file...');
-    const zipFilename = `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}_for_soundcloud.zip`;
+    const zipFilename = `${sanitizeFilename(song.title)}_for_soundcloud.zip`;
     saveAs(content, zipFilename);
-    console.log('Export completed successfully!');
   } catch (error) {
-    console.error('Detailed export error:', error);
-    if (error instanceof Error) {
-      console.error('Error stack:', error.stack);
-    }
-    throw new Error(`Failed to export for SoundCloud: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // Detailed export error
+    throw new Error(`Failed to export for SoundCloud: ${getErrorMessage(error, 'Unknown error')}`);
   }
 };
 
@@ -144,14 +94,11 @@ export const exportMixtapeForSoundCloud = async (
   mixtapeDescription: string = '',
   mixtapeTags: string[] = []
 ): Promise<void> => {
-  console.log('Starting mixtape export process for', songs.length, 'songs');
-
   if (songs.length === 0) {
     throw new Error('No songs selected for export');
   }
 
   try {
-    console.log('Creating zip file...');
     const zip = new JSZip();
     
     // Create a folder for each song
@@ -159,66 +106,34 @@ export const exportMixtapeForSoundCloud = async (
       const song = songs[i];
       
       if (!song.filePath) {
-        console.warn(`Skipping song ${song.title} - no file path available`);
         continue;
       }
       
       // Create a folder for this song
-      const songFolder = zip.folder(song.title.replace(/[^a-zA-Z0-9]/g, '_'));
+      const songFolder = zip.folder(sanitizeFilename(song.title));
       if (!songFolder) continue;
       
-      // Handle both local and remote file URLs
+      // Fetch audio blob using utility function
       let audioBlob: Blob;
       try {
-        if (song.filePath.startsWith('blob:') || song.filePath.startsWith('data:')) {
-          // For blob URLs, we need to fetch them directly
-          console.log(`Handling blob URL for song ${i+1}/${songs.length}...`);
-          const response = await fetch(song.filePath);
-          audioBlob = await response.blob();
-        } else if (song.filePath.startsWith('http')) {
-          // For remote URLs (like Firebase Storage)
-          console.log(`Handling remote URL for song ${i+1}/${songs.length}...`);
-          const response = await fetch(song.filePath);
-          if (!response.ok) {
-            console.warn(`Failed to download audio file for ${song.title}: ${response.status} ${response.statusText}`);
-            continue;
-          }
-          audioBlob = await response.blob();
-        } else {
-          // For local file paths
-          console.log(`Handling local file for song ${i+1}/${songs.length}...`);
-          const response = await fetch(song.filePath);
-          audioBlob = await response.blob();
-        }
-        
-        if (audioBlob.size === 0) {
-          console.warn(`Downloaded audio file for ${song.title} is empty`);
-          continue;
-        }
+        audioBlob = await fetchAudioBlob(song.filePath);
+      } catch (error) {
+        // Skip this song if we can't fetch it
+        continue;
+      }
 
-        // Sanitize filename
-        const filename = `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`;
-        console.log(`Adding audio file to zip as: ${filename}`);
-        songFolder.file(filename, audioBlob);
-        
-        // Create metadata file for this song
-        const metadata = {
-          title: song.title,
-          artist: song.artist,
-          description: `${song.title} by ${song.artist}`,
-          genre: song.metadata?.genre?.[0] || '',
-          tags: song.metadata?.tags?.join(', ') || '',
-          bpm: song.metadata?.bpm || '',
-          key: song.metadata?.key || '',
-          releaseDate: song.metadata?.releaseDate || '',
-          notes: song.notes || ''
-        };
-        
-        // Add metadata as JSON
-        songFolder.file('metadata.json', JSON.stringify(metadata, null, 2));
-        
-        // Add metadata as text for easy reference
-        const metadataText = `
+      // Sanitize filename
+      const filename = `${sanitizeFilename(song.title)}.mp3`;
+      songFolder.file(filename, audioBlob);
+      
+      // Create metadata file for this song
+      const metadata = createSongMetadata(song);
+      
+      // Add metadata as JSON
+      songFolder.file('metadata.json', JSON.stringify(metadata, null, 2));
+      
+      // Add metadata as text for easy reference
+      const metadataText = `
 SoundCloud Upload Information
 ===========================
 
@@ -242,12 +157,8 @@ Instructions:
 5. Set the track to public or private as desired
 6. Click "Save" to publish your track
 `;
-        
-        songFolder.file('soundcloud_instructions.txt', metadataText);
-      } catch (error) {
-        console.error(`Error processing song ${song.title}:`, error);
-        // Continue with other songs even if one fails
-      }
+      
+      songFolder.file('soundcloud_instructions.txt', metadataText);
     }
     
     // Create a mixtape info file
@@ -289,7 +200,6 @@ Instructions:
     
     zip.file('mixtape_instructions.txt', mixtapeInfoText);
     
-    console.log('Generating final zip file...');
     const content = await zip.generateAsync({ 
       type: 'blob',
       compression: 'DEFLATE',
@@ -298,22 +208,15 @@ Instructions:
       }
     });
     
-    console.log('Zip file generated, size:', content.size);
-    
     if (content.size === 0) {
       throw new Error('Generated zip file is empty');
     }
 
-    console.log('Saving zip file...');
-    const zipFilename = `${mixtapeTitle.replace(/[^a-zA-Z0-9]/g, '_')}_mixtape_for_soundcloud.zip`;
+    const zipFilename = `${sanitizeFilename(mixtapeTitle)}_mixtape_for_soundcloud.zip`;
     saveAs(content, zipFilename);
-    console.log('Mixtape export completed successfully!');
   } catch (error) {
-    console.error('Detailed mixtape export error:', error);
-    if (error instanceof Error) {
-      console.error('Error stack:', error.stack);
-    }
-    throw new Error(`Failed to export mixtape for SoundCloud: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // Detailed mixtape export error
+    throw new Error(`Failed to export mixtape for SoundCloud: ${getErrorMessage(error, 'Unknown error')}`);
   }
 };
 
@@ -420,7 +323,7 @@ export const exportAlbum = async (album: Album): Promise<void> => {
       // Add placeholder for audio files (in real implementation, you would convert and add actual audio files)
       album.songs.forEach((song, index) => {
         const trackNumber = (index + 1).toString().padStart(2, '0');
-        const fileName = `${trackNumber}_${song.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${requirements.audioFormat.toLowerCase()}`;
+        const fileName = `${trackNumber}_${sanitizeFilename(song.title).toLowerCase()}.${requirements.audioFormat.toLowerCase()}`;
         audioFolder.file(fileName, 'Audio file placeholder');
       });
       
@@ -446,10 +349,10 @@ Please ensure all files meet the platform's requirements before uploading.`);
     
     // Generate and download the zip file
     const content = await zip.generateAsync({ type: 'blob' });
-    const fileName = `${album.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_export.zip`;
+    const fileName = `${sanitizeFilename(album.title).toLowerCase()}_export.zip`;
     saveAs(content, fileName);
   } catch (error) {
-    console.error('Error exporting album:', error);
+    // Error exporting album
     throw error;
   }
 }; 

@@ -1,4 +1,7 @@
-import { Box, Typography, List, ListItem, ListItemButton, ListItemText, Paper, IconButton, Button, Dialog, Avatar, Chip, Grid, Snackbar, Alert, CircularProgress, DialogTitle, DialogContent, DialogActions, TextField, LinearProgress } from '@mui/material';
+import { Box, Typography, List, ListItem, ListItemText, Paper, IconButton, Button, Dialog, Chip, Grid, Snackbar, Alert, CircularProgress, DialogTitle, DialogContent, DialogActions, LinearProgress, Tooltip } from '@mui/material';
+import EmptyState from './common/EmptyState';
+import SkeletonLoader from './common/SkeletonLoader';
+import SearchBar from './common/SearchBar';
 import { useDropzone } from 'react-dropzone';
 import { useNavigate } from 'react-router-dom';
 import { getTrip, getSongs, createSong, updateSong, createTrip, deleteSong, updateTrip, getSong, getAlbums } from '../services/firebaseService';
@@ -6,7 +9,7 @@ import { getSharedDriveFiles, getNotionTemplate, uploadMusicFile, uploadCoverArt
 import { Song } from '../types/song';
 import type { SongMetadata } from '../types/song';
 import { Trip } from '../types/trip';
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { audioService } from '../services/audioService';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -19,24 +22,28 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import TagIcon from '@mui/icons-material/Tag';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import AudiotrackIcon from '@mui/icons-material/Audiotrack';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import StorageIcon from '@mui/icons-material/Storage';
 import FolderIcon from '@mui/icons-material/Folder';
 import AddIcon from '@mui/icons-material/Add';
 import FolderSharedIcon from '@mui/icons-material/FolderShared';
 import DescriptionIcon from '@mui/icons-material/Description';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import DashboardView from './DashboardView';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DynamicPanel from './panels/DynamicPanel';
+import Breadcrumbs from './common/Breadcrumbs';
+import StatusPipeline from './common/StatusPipeline';
 import { alpha } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { getPanelProps, panelRegistry } from './panels/panelRegistry';
-import { formatBytes } from '../utils/formatters';
+import { formatBytes, removeFileExtension, formatDuration } from '../utils/formatters';
+import { FILE_SIZE_LIMITS, STORAGE_KEYS, SPECIAL_PROJECT_IDS } from '../utils/constants';
+import { validateAudioFile } from '../utils/fileValidation';
+import { storageHelpers } from '../utils/storageHelpers';
+import { createDevPlaceholderProject } from '../utils/devPlaceholder';
 import CreateAlbumFromProjectPanel from './panels/CreateAlbumFromProjectPanel';
 import AlbumIcon from '@mui/icons-material/Album';
-import type { Album } from '../services/firebaseService';
+import type { Album } from '../types/album';
 import SharedDriveDialog from './dialogs/SharedDriveDialog';
 
 // Import panels
@@ -53,7 +60,7 @@ import EmptyProjectPanel from './panels/EmptyProjectPanel';
 import SettingsPanel from './panels/SettingsPanel';
 import AddSongPanel from './panels/AddSongPanel';
 
-type ActivePanel = 'export' | 'metadata' | 'collaborators' | 'analytics' | 'tags' | 'settings' | 'publish-spotify' | 'publish-soundcloud' | 'song-management' | 'create-project' | 'upload' | 'create-playlist' | 'add-song' | null;
+type ActivePanel = 'export' | 'metadata' | 'collaborators' | 'analytics' | 'tags' | 'settings' | 'publish-spotify' | 'publish-soundcloud' | 'song-management' | 'create-project' | 'upload' | 'create-playlist' | 'add-song' | 'overview' | 'mixer' | 'comments' | 'release-planning' | null;
 
 interface MainContentProps {
   selectedTrip?: string | null;
@@ -83,12 +90,6 @@ const LoadingPanel: React.FC = () => (
   </Box>
 );
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const ALLOWED_AUDIO_TYPES = [
-  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/flac', 
-  'audio/aac', 'audio/ogg', 'audio/m4a'
-];
-
 const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentProps) => {
   const navigate = useNavigate();
   const [songs, setSongs] = useState<Song[]>([]);
@@ -106,14 +107,31 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [songForMixer, setSongForMixer] = useState<Song | null>(null); // Store song for mixer panel
+  const [assetIdForComments, setAssetIdForComments] = useState<string | null>(null); // Store assetId for comments
   const [deletingSongId, setDeletingSongId] = useState<string | null>(null);
   const [newSongTitle, setNewSongTitle] = useState('');
   const [newSongArtist, setNewSongArtist] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
-  const [filteredTags, setFilteredTags] = useState<string[]>([]);
+  const [songSearchQuery, setSongSearchQuery] = useState('');
   const theme = useTheme();
+
+  // Filter songs based on search query
+  const filteredSongs = useMemo(() => {
+    if (!songSearchQuery.trim()) {
+      return songs;
+    }
+    const query = songSearchQuery.toLowerCase();
+    return songs.filter(song => 
+      song.title.toLowerCase().includes(query) ||
+      song.artist.toLowerCase().includes(query) ||
+      song.metadata?.tags?.some(tag => tag.toLowerCase().includes(query)) ||
+      song.metadata?.genre?.toLowerCase().includes(query)
+    );
+  }, [songs, songSearchQuery]);
+
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [songToDelete, setSongToDelete] = useState<Song | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -128,33 +146,31 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
   const [success, setSuccess] = useState<string | null>(null);
   const [showPlatformDialog, setShowPlatformDialog] = useState(false);
 
-  // Default tags for different genres and moods
-  const defaultTags = {
+  // Default tags for different genres and moods - memoized to prevent recreation
+  const defaultTags = useMemo(() => ({
     genres: ['Pop', 'Rock', 'Hip Hop', 'Electronic', 'Jazz', 'Classical', 'R&B', 'Country', 'Folk', 'Metal'],
     moods: ['Happy', 'Sad', 'Energetic', 'Calm', 'Aggressive', 'Melancholic', 'Upbeat', 'Dark', 'Peaceful', 'Dramatic'],
     instruments: ['Piano', 'Guitar', 'Drums', 'Bass', 'Strings', 'Synth', 'Vocals', 'Saxophone', 'Trumpet', 'Violin'],
     production: ['Studio', 'Live', 'Demo', 'Remix', 'Cover', 'Original', 'Acoustic', 'Electronic', 'Experimental', 'Traditional']
-  };
+  }), []);
 
-  const allDefaultTags = [
+  const allDefaultTags = useMemo(() => [
     ...defaultTags.genres,
     ...defaultTags.moods,
     ...defaultTags.instruments,
     ...defaultTags.production
-  ];
+  ], [defaultTags]);
 
-  // Filter tags based on input
-  useEffect(() => {
+  // Filter tags based on input - memoized for performance
+  const filteredTags = useMemo(() => {
     if (newTag.trim()) {
-      const filtered = allDefaultTags.filter(tag => 
+      return allDefaultTags.filter(tag => 
         tag.toLowerCase().includes(newTag.toLowerCase()) &&
         !selectedTags.includes(tag)
       );
-      setFilteredTags(filtered);
-    } else {
-      setFilteredTags(allDefaultTags.filter(tag => !selectedTags.includes(tag)));
     }
-  }, [newTag, selectedTags]);
+    return allDefaultTags.filter(tag => !selectedTags.includes(tag));
+  }, [newTag, selectedTags, allDefaultTags]);
 
   // Add effect to handle initialPanel changes
   useEffect(() => {
@@ -164,25 +180,44 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
   }, [initialPanel]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchTripData = async () => {
       if (!selectedTrip) {
-        setTripData(null);
-        setTripName('');
-        setSongs([]);
-        setSelectedSong(null);
+        if (!cancelled) {
+          setTripData(null);
+          setTripName('');
+          setSongs([]);
+          setSelectedSong(null);
+        }
         return;
       }
 
-      setIsLoading(true);
-      setError(null);
+      if (!cancelled) {
+        setIsLoading(true);
+        setError(null);
+      }
       
       try {
+        // Check if this is a dev placeholder project
+        if (import.meta.env.DEV && selectedTrip === 'dev-placeholder-project') {
+          const devProject = createDevPlaceholderProject();
+          
+          if (!cancelled) {
+            setTripData(devProject);
+            setTripName(devProject.name);
+            setSongs(devProject.songs || []);
+            setIsLoading(false);
+          }
+          return;
+        }
+        
         // Check if this is a local songs project
-        if (selectedTrip === 'local-songs-project') {
+        if (selectedTrip === SPECIAL_PROJECT_IDS.LOCAL_SONGS) {
           // Get local files from localStorage
-          const savedLocalFiles = localStorage.getItem('localFiles');
+          const savedLocalFiles = storageHelpers.getItem<Song[]>(STORAGE_KEYS.LOCAL_FILES);
           if (savedLocalFiles) {
-            const localFiles = JSON.parse(savedLocalFiles);
+            const localFiles = savedLocalFiles;
             
             // Create a project from all local files
             const localProject: Trip = {
@@ -199,23 +234,25 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
               type: 'project'
             };
             
-            setTripData(localProject);
-            setTripName(localProject.name);
-            setSongs(localFiles);
-            
-            // Check if we need to select a specific song
-            const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
-            if (songMatch && songMatch[1]) {
-              const songId = songMatch[1];
-              const song = localFiles.find((s: Song) => s.id === songId);
-              if (song) {
-                setSelectedSong(song);
-                // Ensure the song details panel is visible
-                setActivePanel('song-management');
+            if (!cancelled) {
+              setTripData(localProject);
+              setTripName(localProject.name);
+              setSongs(localFiles);
+              
+              // Check if we need to select a specific song
+              const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
+              if (songMatch && songMatch[1]) {
+                const songId = songMatch[1];
+                const song = localFiles.find((s: Song) => s.id === songId);
+                if (song) {
+                  setSelectedSong(song);
+                  // Ensure the song details panel is visible
+                  setActivePanel('song-management');
+                }
               }
+              
+              setIsLoading(false);
             }
-            
-            setIsLoading(false);
             return;
           }
         }
@@ -230,30 +267,37 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
           if (currentLocalProject) {
             const project = JSON.parse(currentLocalProject);
             if (project.id === selectedTrip) {
-              setTripData(project);
-              setTripName(project.name);
-              setSongs(project.songs || []);
+              if (!cancelled) {
+                setTripData(project);
+                setTripName(project.name);
+                // Note: project.songs may be empty - songs are fetched from collection
+                // For local projects, we'll fetch from localStorage if needed
+                const localSongs = project.songs && project.songs.length > 0 
+                  ? project.songs 
+                  : storageHelpers.getItem<Song[]>(STORAGE_KEYS.LOCAL_FILES) || [];
+                setSongs(localSongs);
 
-              // Check if we need to select a specific song
-              const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
-              if (songMatch && songMatch[1]) {
-                const songId = songMatch[1];
-                const song = project.songs.find((s: Song) => s.id === songId);
-                if (song) {
-                  setSelectedSong(song);
-                  // Ensure the song details panel is visible
-                  setActivePanel('song-management');
+                // Check if we need to select a specific song
+                const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
+                if (songMatch && songMatch[1]) {
+                  const songId = songMatch[1];
+                  const song = localSongs.find((s: Song) => s.id === songId);
+                  if (song) {
+                    setSelectedSong(song);
+                    // Ensure the song details panel is visible
+                    setActivePanel('song-management');
+                  }
                 }
+                setIsLoading(false);
               }
-              setIsLoading(false);
               return;
             }
           }
 
           // If we can't find the project in sessionStorage, try localStorage
-          const savedLocalFiles = localStorage.getItem('localFiles');
+          const savedLocalFiles = storageHelpers.getItem<Song[]>(STORAGE_KEYS.LOCAL_FILES);
           if (savedLocalFiles) {
-            const localFiles = JSON.parse(savedLocalFiles);
+            const localFiles = savedLocalFiles;
             const song = localFiles.find((s: Song) => `local-${s.id}` === selectedTrip);
             if (song) {
               // Create a project from the local file
@@ -270,97 +314,117 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
                 status: 'draft' as const,
                 type: 'project'
               };
-              setTripData(localProject);
-              setTripName(localProject.name);
-              setSongs([song]);
-              setSelectedSong(song);
-              // Store the project in sessionStorage for future access
-              sessionStorage.setItem('currentLocalProject', JSON.stringify(localProject));
-              setIsLoading(false);
+              if (!cancelled) {
+                setTripData(localProject);
+                setTripName(localProject.name);
+                setSongs([song]);
+                setSelectedSong(song);
+                // Store the project in sessionStorage for future access
+                sessionStorage.setItem('currentLocalProject', JSON.stringify(localProject));
+                setIsLoading(false);
+              }
               return;
             }
           }
 
-          setError('Local project data not found');
-          setTripData(null);
-          setTripName('');
-          setSongs([]);
-          setSelectedSong(null);
-          navigate('/');
+          if (!cancelled) {
+            setError('Local project data not found');
+            setTripData(null);
+            setTripName('');
+            setSongs([]);
+            setSelectedSong(null);
+            setIsLoading(false);
+            navigate('/');
+          }
           return;
         }
 
         // Fetch trip data
         const trip = await getTrip(selectedTrip);
-        if (trip) {
-          setTripData(trip);
-          setTripName(trip.name);
-          
-          // Fetch songs from the songs collection
-          const tripSongs = await getSongs(selectedTrip);
-          console.log('Fetched songs from collection:', tripSongs);
-          
-          // Update the songs state with the fetched songs
-          setSongs(tripSongs);
-          
-          // Check if we need to select a specific song
-          const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
-          if (songMatch && songMatch[1]) {
-            const songId = songMatch[1];
-            const song = tripSongs.find(s => s.id === songId);
-            if (song) {
-              setSelectedSong(song);
-              setActivePanel('song-management');
+        if (!cancelled) {
+          if (trip) {
+            setTripData(trip);
+            setTripName(trip.name);
+            
+            // Always fetch songs from the songs collection (source of truth)
+            // Do not rely on trip.songs array as it may be out of sync
+            const tripSongs = await getSongs(selectedTrip);
+            
+            if (!cancelled) {
+              // Update the songs state with the fetched songs
+              setSongs(tripSongs);
+              
+              // Check if we need to select a specific song
+              const songMatch = window.location.pathname.match(/\/song\/([^\/]+)/);
+              if (songMatch && songMatch[1]) {
+                const songId = songMatch[1];
+                const song = tripSongs.find(s => s.id === songId);
+                if (song) {
+                  setSelectedSong(song);
+                  setActivePanel('song-management');
+                }
+              }
             }
+          } else {
+            setError('Project not found');
+            setTripData(null);
+            setTripName('');
+            setSongs([]);
           }
         }
       } catch (error) {
-        console.error('Error fetching trip data:', error);
-        setError('Failed to load project data');
+        if (!cancelled) {
+          // Error fetching trip data
+          setError('Failed to load project data');
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchTripData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedTrip, navigate]);
 
   // Add this effect to fetch albums when a trip is selected
   useEffect(() => {
+    let cancelled = false;
+
     const fetchProjectAlbums = async () => {
       if (!selectedTrip || !currentUser) return;
       
       try {
         const albums = await getAlbums(currentUser.uid);
-        // Filter albums that contain songs from this project
-        const projectAlbums = albums.filter(album => 
-          album.songs.some(song => 
-            songs.some(projectSong => projectSong.id === song.id)
-          )
-        );
-        setProjectAlbums(projectAlbums);
+        if (!cancelled) {
+          // Filter albums that contain songs from this project
+          const projectAlbums = albums.filter(album => 
+            album.songs.some(song => 
+              songs.some(projectSong => projectSong.id === song.id)
+            )
+          );
+          setProjectAlbums(projectAlbums);
+        }
       } catch (error) {
-        console.error('Error fetching project albums:', error);
+        // Error fetching project albums - silently fail
       }
     };
 
     if (songs.length > 0) {
       fetchProjectAlbums();
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedTrip, currentUser, songs]);
 
   const validateFile = (file: File) => {
-    if (file.size > MAX_FILE_SIZE) {
-      return `${file.name} exceeds the maximum file size of ${formatBytes(MAX_FILE_SIZE)}`;
-    }
-    
-    const fileType = file.type || '';
-    if (!ALLOWED_AUDIO_TYPES.includes(fileType) && 
-        !file.name.toLowerCase().match(/\.(mp3|wav|flac|aac|ogg|m4a)$/)) {
-      return `${file.name} is not a supported audio format`;
-    }
-    
-    return null;
+    return validateAudioFile(file, FILE_SIZE_LIMITS.AUDIO_UPLOAD);
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -395,12 +459,20 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       return;
     }
 
+    // Track upload progress across all files
+    let completedFiles = 0;
+    const totalFiles = valid.length;
+    const fileProgress: { [key: number]: number } = {};
+
+    const updateOverallProgress = () => {
+      const totalProgress = Object.values(fileProgress).reduce((sum, progress) => sum + progress, 0);
+      const overallProgress = (totalProgress / totalFiles);
+      setUploadProgress(Math.min(overallProgress, 100));
+    };
+
     try {
-      // Process each valid file
-      for (let i = 0; i < valid.length; i++) {
-        const file = valid[i];
-        setUploadProgress((i / valid.length) * 100);
-        
+      // Process each valid file with proper progress tracking
+      await Promise.all(valid.map(async (file, index) => {
         try {
           // Check if it's an audio file
           if (file.type.startsWith('audio/') || file.type === 'application/octet-stream' || 
@@ -411,13 +483,20 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
               file.name.toLowerCase().endsWith('.ogg') || 
               file.name.toLowerCase().endsWith('.m4a')) {
             
-            console.log(`Uploading audio file: ${file.name}, type: ${file.type}`);
-            
             // Get audio metadata
             const metadata = await audioService.getMetadata(file);
             
-            // Upload the audio file
-            const filePath = await uploadMusicFile(file, selectedTrip);
+            // Upload the audio file with progress tracking
+            const filePath = await uploadMusicFile(
+              file, 
+              selectedTrip, 
+              undefined,
+              (progress) => {
+                // Track individual file progress (0-100)
+                fileProgress[index] = progress;
+                updateOverallProgress();
+              }
+            );
             
             // Create a clean metadata object
             const cleanMetadata: Partial<SongMetadata> = {
@@ -435,9 +514,9 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
             
             // Create a new song entry
             const newSong: Omit<Song, 'id'> = {
-              title: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
+              title: removeFileExtension(file.name),
               artist: artistProfile?.name || currentUser.email?.split('@')[0] || 'Unknown Artist',
-              duration: audioService.formatDuration(metadata.duration),
+              duration: formatDuration(metadata.duration),
               filePath,
               userId: currentUser.uid,
               metadata: cleanMetadata
@@ -446,6 +525,10 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
             // Save the song to Firestore
             const createdSong = await createSong(selectedTrip, newSong);
             setSongs(prev => [...prev, createdSong]);
+            
+            completedFiles++;
+            fileProgress[index] = 100;
+            updateOverallProgress();
           } 
           // Check if it's an image file
           else if (file.type.startsWith('image/') || 
@@ -454,60 +537,87 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
                   file.name.toLowerCase().endsWith('.png') || 
                   file.name.toLowerCase().endsWith('.gif')) {
             
-            console.log(`Uploading image file: ${file.name}, type: ${file.type}`);
-            
             // Upload the image file
             const imagePath = await uploadCoverArt(file, selectedTrip);
             
-            // If we have songs, update the first one with the cover art
-            if (songs.length > 0) {
-              const firstSong = songs[0];
-              await updateSong(firstSong.id, { imagePath });
-              
-              // Update the local state
-              setSongs(prev => prev.map(song => 
-                song.id === firstSong.id ? { ...song, imagePath } : song
-              ));
-            } else {
-              // Create a placeholder song with the image
-              const newSong: Omit<Song, 'id'> = {
-                title: 'Cover Art',
-                artist: artistProfile?.name || currentUser.email?.split('@')[0] || 'Unknown Artist',
-                duration: '0:00',
-                filePath: imagePath,
-                imagePath,
-                userId: currentUser.uid,
-                metadata: {
-                  tags: ['cover-art'],
-                  genre: [],
-                  source: 'upload'
-                }
-              };
-              
-              // Save the song to Firestore
-              const createdSong = await createSong(selectedTrip, newSong);
-              setSongs(prev => [...prev, createdSong]);
-            }
+            // Get current songs count (use functional update to avoid stale closure)
+            setSongs(currentSongs => {
+              if (currentSongs.length > 0) {
+                const firstSong = currentSongs[0];
+                // Update song asynchronously - don't block UI
+                updateSong(firstSong.id, { imagePath }).catch((error) => {
+                  // Error updating song - log but don't block
+                  console.error('Failed to update song with image:', error);
+                });
+                return currentSongs.map(song => 
+                  song.id === firstSong.id ? { ...song, imagePath } : song
+                );
+              } else {
+                // Create a placeholder song with the image
+                const newSong: Omit<Song, 'id'> = {
+                  title: 'Cover Art',
+                  artist: artistProfile?.name || currentUser.email?.split('@')[0] || 'Unknown Artist',
+                  duration: '0:00',
+                  filePath: imagePath,
+                  imagePath,
+                  userId: currentUser.uid,
+                  metadata: {
+                    tags: ['cover-art'],
+                    genre: [],
+                    source: 'upload'
+                  }
+                };
+                
+                // Save the song to Firestore asynchronously
+                createSong(selectedTrip, newSong)
+                  .then(createdSong => {
+                    // Use functional update to ensure we have latest state
+                    setSongs(prev => {
+                      // Check if song already exists (avoid duplicates)
+                      if (prev.some(s => s.id === createdSong.id)) {
+                        return prev;
+                      }
+                      return [...prev, createdSong];
+                    });
+                  })
+                  .catch((error) => {
+                    // Error creating song - log but don't block
+                    console.error('Failed to create song with image:', error);
+                  });
+                
+                return currentSongs;
+              }
+            });
+            
+            completedFiles++;
+            fileProgress[index] = 100;
+            updateOverallProgress();
           } else {
-            console.warn(`Unsupported file type: ${file.type} for file ${file.name}`);
+            // Unsupported file type - skipping
             setError(`Unsupported file type: ${file.type} for file ${file.name}`);
+            completedFiles++;
+            fileProgress[index] = 100;
+            updateOverallProgress();
           }
         } catch (fileError) {
           setUploadErrors(prev => [...prev, { 
             file, 
             error: fileError instanceof Error ? fileError.message : 'Upload failed' 
           }]);
+          completedFiles++;
+          fileProgress[index] = 100;
+          updateOverallProgress();
         }
-      }
+      }));
       
       setUploadProgress(100);
     } catch (err) {
-      console.error('Error uploading files:', err);
-      setError(`Failed to upload files: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      // Error uploading files
+      setError(getErrorMessage(err, 'Failed to upload files'));
     } finally {
       setIsUploading(false);
     }
-  }, [selectedTrip, currentUser, artistProfile, songs]);
+  }, [selectedTrip, currentUser, artistProfile]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -535,7 +645,7 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
         setSelectedSong(latestSong);
       }
     } catch (error) {
-      console.error('Error fetching latest song data:', error);
+      // Error fetching latest song data
       // Fallback to using the provided song data if we couldn't fetch the latest
       setSelectedSong(song);
     }
@@ -545,16 +655,19 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
     if (!selectedTrip) return;
     
     try {
-      const refreshedTrip = await getTrip(selectedTrip);
-      if (refreshedTrip) {
-        // Safely handle undefined songs array
-        const updatedSongs = (refreshedTrip.songs || []).map(song =>
-          song.id === updatedSong.id ? updatedSong : song
-        );
-        setSongs(updatedSongs);
+      // Refresh songs from the songs collection (source of truth)
+      const refreshedSongs = await getSongs(selectedTrip);
+      setSongs(refreshedSongs);
+      
+      // Update selected song if it's the one that was updated
+      if (selectedSong && selectedSong.id === updatedSong.id) {
+        const updated = refreshedSongs.find(s => s.id === updatedSong.id);
+        if (updated) {
+          setSelectedSong(updated);
+        }
       }
     } catch (error) {
-      console.error('Error updating song:', error);
+      // Error updating song
     }
   };
 
@@ -570,7 +683,7 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       
       // Update the song with the new file path
       await updateSong(song.id, {
-        title: file.name.replace(/\.[^/.]+$/, ''), // Remove file extension
+        title: removeFileExtension(file.name),
         artist: song.artist,
         metadata: {
           ...song.metadata,
@@ -580,13 +693,13 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       
       // Update local state
       setSongs(prev => prev.map(s => 
-        s.id === song.id ? { ...s, filePath, title: file.name.replace(/\.[^/.]+$/, '') } : s
+        s.id === song.id ? { ...s, filePath, title: removeFileExtension(file.name) } : s
       ));
       
       setUploadProgress(100);
     } catch (error) {
-      console.error('Error replacing song:', error);
-      setError(`Failed to replace song: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Error replacing song
+      setError(getErrorMessage(error, 'Failed to replace song'));
     } finally {
       setIsUploading(false);
     }
@@ -628,7 +741,7 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       onSelectTrip(newTrip.id);
       navigate(`/trip/${newTrip.id}`);
     } catch (err) {
-      console.error('Error creating project:', err);
+      // Error creating project
       setError('Failed to create project. Please try again.');
     } finally {
       setIsCreatingProject(false);
@@ -672,7 +785,7 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       setSharedDriveFiles(files);
       setShowSharedDriveDialog(true);
     } catch (error) {
-      console.error('Error accessing shared drive:', error);
+        // Error accessing shared drive
       setDriveError('Failed to access shared drive. Please try again.');
     } finally {
       setIsLoadingDrive(false);
@@ -687,7 +800,7 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       // Open the template in a new window
       window.open(templateUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      console.error('Error accessing Notion template:', error);
+        // Error accessing Notion template
       setTemplateError('Failed to access Notion template. Please try again.');
     } finally {
       setIsLoadingTemplate(false);
@@ -719,7 +832,7 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       // Update local state
       setSongs(prev => prev.filter(song => song.id !== songToDelete.id));
     } catch (error) {
-      console.error('Error deleting song:', error);
+      // Error deleting song
       setError('Failed to delete song. Please try again.');
     } finally {
       setIsLoading(false);
@@ -738,17 +851,17 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
   };
 
   const handleProjectCreated = (project: Trip) => {
-    // Update songs array safely
-    setSongs(project.songs || []);
+    // Project created - songs will be fetched automatically when selectedTrip changes
     setIsCreatingProject(false);
+    // Navigate to the new project
+    if (project.id) {
+      onSelectTrip(project.id);
+    }
   };
 
   const handleSongCreated = async (song: Song) => {
     // Add the new song to the songs array
     setSongs(prev => [...prev, song]);
-    
-    // Refresh the trip data to ensure everything is in sync
-    await refreshTripData();
     
     // Close the add song panel
     setActivePanel(null);
@@ -758,14 +871,35 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
     if (!selectedTrip) return;
     
     try {
+      setIsLoading(true);
       const refreshedTrip = await getTrip(selectedTrip);
       if (refreshedTrip) {
         setTripData(refreshedTrip);
         setTripName(refreshedTrip.name);
-        setSongs(refreshedTrip.songs || []); // Safely handle undefined songs
+        
+        // Always fetch songs from the songs collection (source of truth)
+        const refreshedSongs = await getSongs(selectedTrip);
+        setSongs(refreshedSongs);
+        
+        // Update selected song if it still exists
+        if (selectedSong) {
+          const updated = refreshedSongs.find(s => s.id === selectedSong.id);
+          if (updated) {
+            setSelectedSong(updated);
+          } else {
+            setSelectedSong(null);
+          }
+        }
+      } else {
+        setError('Project not found');
+        setTripData(null);
+        setTripName('');
+        setSongs([]);
       }
     } catch (error) {
-      console.error('Error refreshing trip:', error);
+      setError(getErrorMessage(error, 'Failed to refresh project'));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -781,7 +915,7 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
         );
         setProjectAlbums(projectAlbums);
       } catch (error) {
-        console.error('Error refreshing project albums:', error);
+        // Error refreshing project albums
       }
     }
     
@@ -831,6 +965,100 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       );
     }
 
+    // Prepare additional props for specific panels
+    const additionalProps: Record<string, any> = {};
+    
+    // Helper to get collaborators list
+    const getCollaboratorsList = (): Array<{ id: string; name: string; email?: string; avatar?: string }> => {
+      if (!tripData) return [];
+      
+      const collaborators: Array<{ id: string; name: string; email?: string; avatar?: string }> = [];
+      
+      // Add current user as collaborator
+      if (currentUser) {
+        collaborators.push({
+          id: currentUser.uid,
+          name: currentUser.displayName || currentUser.email?.split('@')[0] || 'You',
+          email: currentUser.email || undefined,
+        });
+      }
+      
+      // Add other collaborators (would need to fetch user profiles in real implementation)
+      if (tripData.collaborators) {
+        tripData.collaborators.forEach(collabId => {
+          if (collabId !== currentUser?.uid) {
+            collaborators.push({
+              id: collabId,
+              name: collabId, // In real implementation, fetch user profile
+              email: undefined,
+            });
+          }
+        });
+      }
+      
+      return collaborators;
+    };
+    
+    if (activePanel === 'overview') {
+      additionalProps.onCreateAlbum = () => setShowCreateAlbum(true);
+      additionalProps.onExport = () => setActivePanel('export');
+      additionalProps.onShare = () => setActivePanel('collaborators');
+      additionalProps.onEdit = () => setActivePanel('settings');
+      additionalProps.setActivePanel = setActivePanel;
+      additionalProps.onStatusChange = async (newStatus: any) => {
+        if (tripData && selectedTrip) {
+          try {
+            await updateTrip(selectedTrip, { status: newStatus });
+            setTripData({ ...tripData, status: newStatus });
+          } catch (error) {
+            setError('Failed to update project status');
+          }
+        }
+      };
+    }
+    
+    if (activePanel === 'comments') {
+      additionalProps.collaborators = getCollaboratorsList();
+      // If assetIdForComments is set (from opening comments from a song), pass it
+      if (assetIdForComments) {
+        additionalProps.assetId = assetIdForComments;
+      } else if (selectedSong) {
+        // If a song is selected, pass its ID as assetId for song-specific comments
+        additionalProps.assetId = selectedSong.id;
+      }
+    }
+    
+    if (activePanel === 'release-planning') {
+      additionalProps.collaborators = getCollaboratorsList();
+      additionalProps.onCreateRelease = async (release: any) => {
+        // Handle release creation
+        try {
+          const { createRelease } = await import('../services/firebaseService');
+          await createRelease({
+            ...release,
+            userId: currentUser?.uid || '',
+          });
+          setSuccess('Release created successfully');
+        } catch (error) {
+          setError('Failed to create release');
+        }
+      };
+    }
+    
+    if (activePanel === 'mixer') {
+      // Mixer panel needs a song with stems
+      // Use songForMixer if set, otherwise try selectedSong or find first song with stems
+      const songWithStems = songForMixer && songForMixer.stems && songForMixer.stems.length > 0
+        ? songForMixer
+        : selectedSong && selectedSong.stems && selectedSong.stems.length > 0
+        ? selectedSong
+        : songs.find(s => s.stems && s.stems.length > 0);
+      
+      if (songWithStems) {
+        additionalProps.song = songWithStems;
+      }
+    }
+
     return (
       <Suspense fallback={<LoadingPanel />}>
         <DynamicPanel
@@ -839,36 +1067,13 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
           songs={songs}
           selectedTrip={selectedTrip}
           onClose={handleClosePanel}
+          additionalProps={additionalProps}
         />
       </Suspense>
     );
   };
 
-  // Add this function to refresh trip data
-  const refreshTripData = async () => {
-    if (!selectedTrip) return;
-    
-    try {
-      setIsLoading(true);
-      
-      // Fetch fresh trip data
-      const refreshedTrip = await getTrip(selectedTrip);
-      if (refreshedTrip) {
-        setTripData(refreshedTrip);
-        setTripName(refreshedTrip.name);
-        
-        // Fetch fresh songs data
-        const refreshedSongs = await getSongs(selectedTrip);
-        console.log('Refreshed songs:', refreshedSongs);
-        setSongs(refreshedSongs);
-      }
-    } catch (error) {
-      console.error('Error refreshing trip data:', error);
-      setError('Failed to refresh project data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // refreshTripData removed - use handleRefreshTrip instead (no duplicate functions)
 
   return (
     <Box 
@@ -882,38 +1087,73 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
         height: '100%',
       }}
     >
+      {/* Breadcrumbs */}
+      {selectedTrip && tripData && (
+        <Breadcrumbs
+          items={[
+            {
+              label: tripData.name || tripName,
+              path: `/trip/${selectedTrip}`,
+              icon: <FolderIcon fontSize="small" />
+            }
+          ]}
+        />
+      )}
+
       {/* Header Section */}
       <Box 
         sx={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
-          alignItems: 'center',
+          alignItems: 'flex-start',
           mb: 3,
           pb: 2,
           borderBottom: '1px solid',
           borderColor: 'divider',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {selectedTrip ? (
-            <>
-              <IconButton 
-                onClick={() => navigate('/')}
-                sx={{ 
-                  color: 'text.secondary',
-                  '&:hover': { color: 'primary.main' }
-                }}
-              >
-                <ArrowBackIcon />
-              </IconButton>
-              <Typography variant="h4" fontWeight="bold">
-                {tripName}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {selectedTrip ? (
+              <>
+                <IconButton 
+                  onClick={() => navigate('/')}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { color: 'primary.main' }
+                  }}
+                >
+                  <ArrowBackIcon />
+                </IconButton>
+                <Typography variant="h4" fontWeight="bold">
+                  {tripName}
                 </Typography>
-            </>
-          ) : (
-            <Typography variant="h4" fontWeight="bold">
-              Dashboard
-            </Typography>
+              </>
+            ) : (
+              <Typography variant="h4" fontWeight="bold">
+                Dashboard
+              </Typography>
+            )}
+          </Box>
+          {/* Status Pipeline - Compact Version */}
+          {selectedTrip && tripData && tripData.status && (
+            <Box sx={{ ml: 7 }}>
+              <StatusPipeline
+                currentStatus={tripData.status}
+                onStatusChange={async (newStatus) => {
+                  if (tripData && selectedTrip) {
+                    try {
+                      await updateTrip(selectedTrip, { status: newStatus });
+                      setTripData({ ...tripData, status: newStatus });
+                    } catch (error) {
+                      setError('Failed to update project status');
+                    }
+                  }
+                }}
+                compact={true}
+                showDescriptions={false}
+              />
+            </Box>
           )}
         </Box>
         
@@ -966,6 +1206,22 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
               flexWrap: 'wrap',
             }}
           >
+            <Button
+              variant="outlined"
+              startIcon={<DashboardIcon />}
+              onClick={() => setActivePanel('overview')}
+              sx={{ 
+                borderRadius: 2,
+                borderColor: 'primary.main',
+                color: 'primary.main',
+                '&:hover': {
+                  borderColor: 'primary.dark',
+                  bgcolor: alpha(theme.palette.primary.main, 0.05),
+                }
+              }}
+            >
+              Overview
+            </Button>
             <Button
               variant="outlined"
               startIcon={<FolderSharedIcon />}
@@ -1091,54 +1347,33 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
             )}
           </Box>
 
+          {/* Search Bar for Songs */}
+          {!isLoading && songs.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <SearchBar
+                placeholder="Search songs by title, artist, or tags..."
+                onSearch={setSongSearchQuery}
+                aria-label="Search songs"
+                size="small"
+              />
+            </Box>
+          )}
+
           {/* Songs List */}
           {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-              <CircularProgress size={60} thickness={4} />
-            </Box>
+            <SkeletonLoader variant="card" count={8} />
           ) : songs.length === 0 ? (
-            <Box 
-              sx={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                height: '50vh',
-                textAlign: 'center',
-                color: 'text.secondary',
-              }}
-            >
-              <MusicNoteIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
-              <Typography variant="h6" gutterBottom>
-                No songs yet
-              </Typography>
-              <Typography variant="body1" sx={{ mb: 3, maxWidth: 500 }}>
-                Add songs to your project by uploading files, importing from shared drive, or creating an empty project.
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={handleAddSongClick}
-                  sx={{
-                    borderRadius: 2,
-                    boxShadow: '0px 4px 12px rgba(29, 185, 84, 0.2)',
-                    '&:hover': {
-                      boxShadow: '0px 6px 16px rgba(29, 185, 84, 0.3)',
-                    }
-                  }}
-                >
-                  Add Song
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<FolderSharedIcon />}
-                  onClick={handleOpenSharedDrive}
-                  sx={{ borderRadius: 2 }}
-                >
-                  Import from Drive
-                </Button>
-              </Box>
+            <>
+              <EmptyState
+                icon={<MusicNoteIcon sx={{ fontSize: 64, color: 'primary.main' }} />}
+                title="No songs yet"
+                description="Add songs to your project by uploading files, importing from shared drive, or creating an empty project. Start building your musical collection today."
+                actionLabel="Add Song"
+                onAction={handleAddSongClick}
+                secondaryActionLabel="Import from Drive"
+                onSecondaryAction={handleOpenSharedDrive}
+                sx={{ my: 4 }}
+              />
               
               {/* Add drop zone for file uploads */}
               <Box sx={{ mt: 4, width: '100%', maxWidth: 600 }}>
@@ -1175,14 +1410,23 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
                     or click to select files
                   </Typography>
                   <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
-                    Supported formats: MP3, WAV, FLAC, AAC, OGG, M4A (up to {formatBytes(MAX_FILE_SIZE)})
+                    Supported formats: MP3, WAV, FLAC, AAC, OGG, M4A (up to {formatBytes(FILE_SIZE_LIMITS.AUDIO_UPLOAD)})
                   </Typography>
                 </Box>
               </Box>
-            </Box>
+            </>
+          ) : filteredSongs.length === 0 ? (
+            <EmptyState
+              icon={<MusicNoteIcon sx={{ fontSize: 64, color: 'primary.main' }} />}
+              title={`No songs found for "${songSearchQuery}"`}
+              description="Try adjusting your search terms or add a new song to this project."
+              actionLabel="Add Song"
+              onAction={handleAddSongClick}
+              sx={{ my: 4 }}
+            />
           ) : (
             <Grid container spacing={2}>
-              {songs.map((song) => (
+              {filteredSongs.map((song) => (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={song.id}>
                   <Paper
                     elevation={0}
@@ -1195,38 +1439,57 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
                       bgcolor: 'background.paper',
                       border: '1px solid',
                       borderColor: 'divider',
-                      transition: 'all 0.2s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.15)',
-                        borderColor: 'primary.main',
-                      },
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                       position: 'relative',
+                      overflow: 'hidden',
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: '4px',
+                        background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                        transform: 'scaleX(0)',
+                        transformOrigin: 'left',
+                        transition: 'transform 0.3s ease',
+                      },
+                      '&:hover': {
+                        transform: 'translateY(-8px) scale(1.02)',
+                        boxShadow: `0px 12px 32px ${alpha(theme.palette.primary.main, 0.2)}`,
+                        borderColor: 'primary.main',
+                        '&::before': {
+                          transform: 'scaleX(1)',
+                        },
+                      },
                     }}
                   >
                     {/* Delete Button */}
-                    <IconButton
-                      onClick={() => handleDeleteSong(song.id)}
-                      disabled={isLoading && deletingSongId === song.id}
-                      sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        bgcolor: 'background.paper',
-                        boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
-                        '&:hover': {
-                          bgcolor: 'error.light',
-                          color: 'white',
-                        },
-                        zIndex: 1,
-                      }}
-                    >
-                      {isLoading && deletingSongId === song.id ? (
-                        <CircularProgress size={20} />
-                      ) : (
-                        <DeleteIcon />
-                      )}
-                    </IconButton>
+                    <Tooltip title="Delete song" arrow>
+                      <IconButton
+                        onClick={() => handleDeleteSong(song.id)}
+                        disabled={isLoading && deletingSongId === song.id}
+                        aria-label={`Delete ${song.title}`}
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          bgcolor: 'background.paper',
+                          boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+                          '&:hover': {
+                            bgcolor: 'error.light',
+                            color: 'white',
+                          },
+                          zIndex: 1,
+                        }}
+                      >
+                        {isLoading && deletingSongId === song.id ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <DeleteIcon />
+                        )}
+                      </IconButton>
+                    </Tooltip>
 
                     <Box 
                       sx={{ 
@@ -1237,8 +1500,25 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
                         aspectRatio: '1/1',
                         bgcolor: 'background.default',
                         cursor: 'pointer',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        '&:hover': {
+                          transform: 'scale(1.05)',
+                          boxShadow: `0px 8px 24px ${alpha(theme.palette.primary.main, 0.3)}`,
+                          '& .play-overlay': {
+                            opacity: 1,
+                          },
+                        },
                       }}
                       onClick={() => handleSongClick(song)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Play ${song.title} by ${song.artist}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSongClick(song);
+                        }
+                      }}
                     >
                       {song.imagePath ? (
                         <Box
@@ -1266,30 +1546,41 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
                         </Box>
                       )}
                       <Box
+                        className="play-overlay"
                         sx={{
                           position: 'absolute',
-                          bottom: 0,
+                          top: 0,
                           left: 0,
                           right: 0,
-                          p: 1,
-                          background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%)',
+                          bottom: 0,
+                          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.3)} 0%, ${alpha(theme.palette.secondary.main, 0.2)} 100%)`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          opacity: 0,
+                          transition: 'opacity 0.3s ease',
                         }}
                       >
-                        <IconButton
-                          size="small" 
-                          sx={{
-                            color: 'white',
-                            bgcolor: 'rgba(0,0,0,0.3)',
-                            '&:hover': {
-                              bgcolor: 'rgba(0,0,0,0.5)',
-                            },
-                          }}
-                        >
-                          <PlayArrowIcon />
-                        </IconButton>
+                        <Tooltip title="Play song" arrow>
+                          <IconButton
+                            size="large" 
+                            aria-label={`Play ${song.title}`}
+                            sx={{
+                              color: 'white',
+                              bgcolor: alpha(theme.palette.common.black, 0.5),
+                              width: 64,
+                              height: 64,
+                              transition: 'all 0.3s ease',
+                              '&:hover': {
+                                bgcolor: alpha(theme.palette.primary.main, 0.9),
+                                transform: 'scale(1.1)',
+                                boxShadow: `0px 4px 16px ${alpha(theme.palette.primary.main, 0.5)}`,
+                              },
+                            }}
+                          >
+                            <PlayArrowIcon sx={{ fontSize: 32 }} />
+                          </IconButton>
+                        </Tooltip>
                       </Box>
                     </Box>
                     <Typography 
@@ -1464,8 +1755,24 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       {selectedSong && (
         <SongDetailsPanel
           song={selectedSong}
-          onClose={() => setSelectedSong(null)}
+          onClose={() => {
+            setSelectedSong(null);
+            setSongForMixer(null); // Clear mixer song when closing
+            setAssetIdForComments(null); // Clear assetId when closing
+          }}
           onSongUpdated={handleSongUpdate}
+          onOpenMixer={(song) => {
+            // Store song for mixer and open panel
+            setSongForMixer(song);
+            setActivePanel('mixer');
+          }}
+          onOpenComments={(songId) => {
+            // Store assetId for comments and open panel
+            setAssetIdForComments(songId);
+            setActivePanel('comments');
+          }}
+          projectId={selectedTrip || undefined}
+          collaborators={tripData ? getCollaboratorsList() : []}
         />
       )}
 
