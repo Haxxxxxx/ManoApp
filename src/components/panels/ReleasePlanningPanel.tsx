@@ -19,6 +19,9 @@ import { Release, ReleaseType, ChecklistItem } from '../../types/release';
 import ReleaseChecklist from '../common/ReleaseChecklist';
 import { generateChecklist, calculateChecklistProgress } from '../../services/releaseChecklistService';
 import { useToast } from '../../hooks/useToast';
+import RightsEditor from '../RightsEditor';
+import { RightsSplit } from '../../types/export';
+import { isFeatureEnabled } from '../../config/features';
 
 interface ReleasePlanningPanelProps {
   projectId: string;
@@ -44,6 +47,7 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
   const [checklist, setChecklist] = useState<ChecklistItem[]>(
     existingRelease?.checklist || generateChecklist(existingRelease?.type || 'single')
   );
+  const [rightsSplits, setRightsSplits] = useState<RightsSplit[]>([]);
 
   const handleToggleItem = (itemId: string) => {
     setChecklist(prev => prev.map(item => {
@@ -174,6 +178,17 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
         </Grid>
       </Grid>
 
+      {isFeatureEnabled('soundcloud') && collaborators.length > 0 && (
+        <Box sx={{ mt: 4 }}>
+          <RightsEditor
+            splits={rightsSplits}
+            collaborators={collaborators}
+            onChange={setRightsSplits}
+            showValidation={true}
+          />
+        </Box>
+      )}
+
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
         <Button onClick={onClose} variant="outlined">
           Cancel
@@ -181,6 +196,18 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
         <Button onClick={handleSave} variant="contained">
           Save Release
         </Button>
+        {isFeatureEnabled('soundcloud') && existingRelease && (
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => {
+              // Export will be handled by parent component
+              // This button can trigger export flow
+            }}
+          >
+            Export Release
+          </Button>
+        )}
       </Box>
 
       <ToastComponent />

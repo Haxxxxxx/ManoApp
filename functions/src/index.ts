@@ -12,3 +12,20 @@ export { aiMetadata } from './aiMetadata';
 
 // Export release validation function
 export { validateRelease } from './releaseValidation';
+
+// Export Google Drive integration functions
+export {
+  startGoogleDriveOAuth,
+  handleGoogleDriveCallback,
+  listGoogleDriveFiles,
+  importGoogleDriveFile,
+} from './integrations/googleDrive/routes';
+
+// Export SoundCloud integration functions
+export {
+  checkSoundCloudToken,
+  startSoundCloudOAuth,
+  handleSoundCloudCallback,
+  submitToSoundCloud,
+  getSoundCloudSubmissionStatus,
+} from './integrations/soundcloud/routes';

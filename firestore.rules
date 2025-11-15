@@ -167,5 +167,40 @@ service cloud.firestore {
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
+
+    // Connectors collection (OAuth integrations)
+    match /connectors/{connectorId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Assets collection (imported files)
+    match /assets/{assetId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        (resource.data.projectId != null &&
+         exists(/databases/$(database)/documents/trips/$(resource.data.projectId)) &&
+         (
+           get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.userId == request.auth.uid ||
+           request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.collaborators
+         ))
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        (resource.data.projectId != null &&
+         exists(/databases/$(database)/documents/trips/$(resource.data.projectId)) &&
+         (
+           get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.userId == request.auth.uid ||
+           request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.collaborators
+         ))
+      );
+    }
+
+    // OAuth states collection (temporary, for CSRF protection)
+    match /oauthStates/{stateId} {
+      allow read, write: if false; // Only server-side access
+    }
   }
 }

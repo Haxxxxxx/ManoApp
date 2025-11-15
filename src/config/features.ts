@@ -19,6 +19,12 @@ export interface FeatureFlags {
   
   /** Versioned collaborative comments with @mentions */
   comments: boolean;
+  
+  /** Google Drive import integration */
+  gdriveImport: boolean;
+  
+  /** SoundCloud connector integration */
+  soundcloud: boolean;
 }
 
 /**
@@ -29,6 +35,8 @@ export const featureFlags: FeatureFlags = {
   stemsAndMixer: false,
   releaseChecklist: false,
   comments: false,
+  gdriveImport: false,
+  soundcloud: false,
 };
 
 /**

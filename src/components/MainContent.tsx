@@ -1044,6 +1044,22 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
         }
       };
     }
+
+    if (activePanel === 'gdrive-import') {
+      additionalProps.projectId = selectedTrip || undefined;
+      additionalProps.onFileImported = async (assetId: string) => {
+        setSuccess('File imported successfully');
+        // Refresh songs list if needed
+        if (selectedTrip) {
+          try {
+            const updatedSongs = await getSongs(selectedTrip);
+            setSongs(updatedSongs);
+          } catch (error) {
+            // Silently fail - user can manually refresh if needed
+          }
+        }
+      };
+    }
     
     if (activePanel === 'mixer') {
       // Mixer panel needs a song with stems

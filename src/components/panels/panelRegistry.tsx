@@ -27,6 +27,7 @@ import ProjectOverviewPanel from './ProjectOverviewPanel';
 import MixerPanel from './MixerPanel';
 import CommentsPanel from './CommentsPanel';
 import ReleasePlanningPanel from './ReleasePlanningPanel';
+import GoogleDriveImportPanel from './GoogleDriveImportPanel';
 import type { Trip } from '../../types/trip';
 import type { Song } from '../../types/song';
 
@@ -162,6 +163,12 @@ export const panelRegistry: PanelRegistry = {
     title: 'Release Planning',
     icon: <ChecklistIcon />,
     requiresTrip: true
+  },
+  'gdrive-import': {
+    component: GoogleDriveImportPanel,
+    title: 'Import from Google Drive',
+    icon: <CloudUploadIcon />,
+    requiresTrip: false
   }
 };
 
@@ -223,10 +230,14 @@ export const getPanelProps = (
         // Collaborators will be passed via additionalProps from MainContent
       }
 
+      if (panelType === 'gdrive-import') {
+        panelProps.projectId = selectedTrip || '';
+      }
+
       if (panelType === 'mixer') {
         // Song with stems will be passed via additionalProps
         // This should be set when opening mixer from a song
-  }
+      }
   
   return panelProps;
 }; 

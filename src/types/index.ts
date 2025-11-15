@@ -5,3 +5,7 @@ export * from './album';
 export * from './artist';
 export * from './user';
 export * from './activity';
+export * from './asset';
+export * from './integration';
+export * from './release';
+export * from './export';

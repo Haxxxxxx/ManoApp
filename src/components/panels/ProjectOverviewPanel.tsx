@@ -39,6 +39,7 @@ import { isFeatureEnabled } from '../../config/features';
 import { useNavigate } from 'react-router-dom';
 import { Trip, TripStatus } from '../../types/trip';
 import { Song } from '../../types/song';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import { useSongs } from '../../hooks/useSongs';
 import { useTrip } from '../../hooks/useTrip';
 import { formatDuration, parseDurationToSeconds } from '../../utils/formatters';
@@ -424,6 +425,16 @@ const ProjectOverviewPanel: React.FC<ProjectOverviewPanelProps> = ({
                 label="Release Planning"
                 onClick={() => setActivePanel('release-planning')}
                 color="warning"
+              />
+            </Grid>
+          )}
+          {isFeatureEnabled('gdriveImport') && setActivePanel && (
+            <Grid item xs={12} sm={6} md={4}>
+              <QuickActionButton
+                icon={<CloudDownloadIcon />}
+                label="Import from Drive"
+                onClick={() => setActivePanel('gdrive-import')}
+                color="info"
               />
             </Grid>
           )}

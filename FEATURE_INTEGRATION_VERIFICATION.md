@@ -42,9 +42,11 @@ SongDetailsPanel → Stems Tab → onOpenMixer() → MainContent.setActivePanel(
 2. MainContent → `setActivePanel('mixer')` with song prop
 
 **Props Flow:**
-- `SongDetailsPanel` receives `onOpenMixer` callback
-- `MainContent` passes song with stems via `additionalProps.song`
-- `MixerPanel` receives `song` prop with `stems` array
+- ✅ `SongDetailsPanel` receives `onOpenMixer` callback from `MainContent`
+- ✅ `MainContent` stores song in `songForMixer` state when mixer is opened
+- ✅ `MainContent` passes song with stems via `additionalProps.song` to `MixerPanel`
+- ✅ `MixerPanel` receives `song` prop with `stems` array
+- ✅ State cleanup: `songForMixer` cleared when `SongDetailsPanel` closes
 
 ---
 
@@ -94,9 +96,12 @@ SongDetailsPanel → Comments Tab → onOpenComments() → MainContent.setActive
 3. MainContent → `setActivePanel('comments')` with optional `assetId`
 
 **Props Flow:**
-- `MainContent` passes `collaborators` and `assetId` (if song selected)
-- `CommentsPanel` receives `projectId`, `assetId?`, `collaborators`
-- Real-time subscriptions: `subscribeToProjectComments` or `subscribeToAssetComments`
+- ✅ `SongDetailsPanel` receives `onOpenComments`, `projectId`, and `collaborators` from `MainContent`
+- ✅ `MainContent` stores `assetId` in `assetIdForComments` state when comments are opened from a song
+- ✅ `MainContent` passes `collaborators` and `assetId` (if set) via `additionalProps` to `CommentsPanel`
+- ✅ `CommentsPanel` receives `projectId`, `assetId?`, `collaborators`
+- ✅ Real-time subscriptions: `subscribeToProjectComments` or `subscribeToAssetComments` based on `assetId`
+- ✅ State cleanup: `assetIdForComments` cleared when `SongDetailsPanel` closes
 
 ---
 
@@ -137,11 +142,13 @@ All features properly gated:
 ### MainContent → DynamicPanel → Panels
 1. **Mixer Panel:**
    - ✅ `additionalProps.song` passed (song with stems)
-   - ✅ Song found from `selectedSong` or `songs` array
+   - ✅ Song priority: `songForMixer` → `selectedSong` → first song with stems from `songs` array
+   - ✅ State management: `songForMixer` set when opening mixer from `SongDetailsPanel`
 
 2. **Comments Panel:**
    - ✅ `additionalProps.collaborators` passed (from `getCollaboratorsList()`)
-   - ✅ `additionalProps.assetId` passed if `selectedSong` exists
+   - ✅ `additionalProps.assetId` passed if `assetIdForComments` is set (from song) or `selectedSong` exists
+   - ✅ State management: `assetIdForComments` set when opening comments from `SongDetailsPanel`
    - ✅ Real-time subscription uses correct function based on `assetId`
 
 3. **Release Planning Panel:**
@@ -152,14 +159,16 @@ All features properly gated:
 1. **Stems Tab:**
    - ✅ Only shows if `isFeatureEnabled('stemsAndMixer')` AND `song.stems.length > 0`
    - ✅ Tab index: 4 (after Metadata tab)
-   - ✅ "Open Mixer" button calls `onOpenMixer(editedSong)`
+   - ✅ "Open Mixer" button calls `onOpenMixer(editedSong)` (if callback provided)
    - ✅ Auto-opens mixer when tab is clicked (if callback available)
+   - ✅ Props: `onOpenMixer` callback passed from `MainContent`
 
 2. **Comments Tab:**
    - ✅ Only shows if `isFeatureEnabled('comments')` AND `projectId` exists
    - ✅ Tab index: 5 (if stems tab exists) or 4 (if no stems tab)
-   - ✅ "View All Comments" button calls `onOpenComments(song.id)`
+   - ✅ "View All Comments" button calls `onOpenComments(song.id)` (if callback provided)
    - ✅ Auto-opens comments panel when tab is clicked (if callback available)
+   - ✅ Props: `onOpenComments`, `projectId`, and `collaborators` passed from `MainContent`
 
 ## Code Quality ✅
 
