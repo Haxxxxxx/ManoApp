@@ -285,30 +285,32 @@ npm run preview
 
 ## Troubleshooting
 
-### Issue: "Firebase app not initialized"
+### Common Issues
+
+#### Issue: "Firebase app not initialized"
 
 **Solution**: Check that all `VITE_FIREBASE_*` environment variables are set in `.env` file.
 
-### Issue: "Functions not found"
+#### Issue: "Functions not found"
 
 **Solution**: 
 1. Ensure Firebase Functions are deployed: `firebase deploy --only functions`
 2. Or use emulators: `firebase emulators:start`
 
-### Issue: "Permission denied" errors
+#### Issue: "Permission denied" errors
 
 **Solution**: 
 1. Check Firestore rules are deployed: `firebase deploy --only firestore:rules`
 2. Verify you're authenticated: Check Firebase Auth in browser console
 
-### Issue: OAuth redirect not working
+#### Issue: OAuth redirect not working
 
 **Solution**:
 1. Verify redirect URI matches exactly (including http/https, port, path)
 2. Check OAuth provider settings
 3. For local development, use emulator URLs
 
-### Issue: npm install fails with peer dependency errors
+#### Issue: npm install fails with peer dependency errors
 
 **Solution**:
 ```bash
@@ -324,7 +326,7 @@ yarn install
 
 **Note**: An `.npmrc` file is included in the project root that should handle this automatically. If issues persist, check that the file exists and contains `legacy-peer-deps=true`.
 
-### Issue: Build errors
+#### Issue: Build errors
 
 **Solution**:
 ```bash
@@ -339,7 +341,7 @@ rm -rf dist .vite
 npm run build
 ```
 
-### Issue: TypeScript errors
+#### Issue: TypeScript errors
 
 **Solution**:
 ```bash
@@ -400,7 +402,8 @@ npm run build:watch     # Build and watch
 
 ### Important Files
 
-- `.env` - Frontend environment variables
+- `.env` - Frontend environment variables (create this file)
+- `.npmrc` - NPM configuration (legacy-peer-deps setting)
 - `firebase.json` - Firebase configuration
 - `firestore.rules` - Firestore security rules
 - `firestore.indexes.json` - Firestore indexes
