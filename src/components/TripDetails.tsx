@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Paper, Button, Stack, Chip, Tabs, Tab, IconButton, Tooltip, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Tabs, Tab, IconButton, CircularProgress, Alert } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Trip } from '../types/trip';
 import { Song } from '../types/song';
-import { deleteTrip } from '../services/firebaseService';
 import ProjectDetails from './ProjectDetails';
 import SongDetailsPanel from './panels/SongDetailsPanel';
 import TagsAndCategoriesPanel from './panels/TagsAndCategoriesPanel';
@@ -24,20 +23,20 @@ interface TripDetailsProps {
 
 const TripDetails: React.FC<TripDetailsProps> = ({ trip: initialTrip, onTripUpdated }) => {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  useAuth();
   const [selectedTab, setSelectedTab] = useState(0);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [_isEditing, setIsEditing] = useState(false);
+  const [_isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Use hooks for data management
-  const { trip, loading: tripLoading, error: tripError, refresh: refreshTrip, updateTripData } = useTrip({
+  const { trip, loading: tripLoading, error: tripError, updateTripData } = useTrip({
     tripId: initialTrip.id,
     autoFetch: true
   });
 
-  const { songs, loading: songsLoading, error: songsError, refresh: refreshSongs, updateSongData, removeSong } = useSongs({
+  const { songs, loading: songsLoading, error: songsError, refresh: refreshSongs, updateSongData } = useSongs({
     tripId: initialTrip.id,
     autoFetch: true
   });
@@ -52,20 +51,16 @@ const TripDetails: React.FC<TripDetailsProps> = ({ trip: initialTrip, onTripUpda
     }
   }, [combinedError]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setSelectedTab(newValue);
   };
 
-  const handleSongsUpdated = async (updatedSongs: Song[]) => {
+  const handleSongsUpdated = async (_updatedSongs: Song[]) => {
     // Songs are managed by useSongs hook, just refresh to sync
     await refreshSongs();
     if (trip) {
       onTripUpdated(trip);
     }
-  };
-
-  const handleSongSelect = (song: Song) => {
-    setSelectedSong(song);
   };
 
   const handleSongUpdate = async (updatedSong: Song) => {

@@ -12,13 +12,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  IconButton,
   InputAdornment,
   Tooltip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Autocomplete,
   Card,
   CardContent,
@@ -27,14 +22,14 @@ import {
   Switch,
   FormControlLabel
 } from '@mui/material';
-import { 
-  Add as AddIcon, 
-  Delete as DeleteIcon, 
-  MusicNote as MusicNoteIcon, 
+import {
+  Add as AddIcon,
   Info as InfoIcon,
   Album as AlbumIcon,
   Audiotrack as AudiotrackIcon,
   LibraryMusic as LibraryMusicIcon,
+  QueueMusic as QueueMusicIcon,
+  PlaylistPlay as PlaylistPlayIcon,
   Public as PublicIcon,
   Lock as LockIcon
 } from '@mui/icons-material';
@@ -45,41 +40,37 @@ import { Trip } from '../../types/trip';
 import { useNavigate } from 'react-router-dom';
 import { alpha, useTheme } from '@mui/material/styles';
 import { SUGGESTED_TAGS } from '../../utils/constants';
+import { PROJECT_TEMPLATES as TEMPLATES_CONFIG } from '../../config/projectTemplates';
+import type { ProjectTemplate as TemplateConfig } from '../../types/template';
 
-// Project templates
-type TemplateId = 'project' | 'single' | 'album';
+// Map icon names to JSX elements
+const iconMap: Record<string, JSX.Element> = {
+  Album: <AlbumIcon sx={{ fontSize: 40 }} />,
+  Audiotrack: <AudiotrackIcon sx={{ fontSize: 40 }} />,
+  QueueMusic: <QueueMusicIcon sx={{ fontSize: 40 }} />,
+  LibraryMusic: <LibraryMusicIcon sx={{ fontSize: 40 }} />,
+  PlaylistPlay: <PlaylistPlayIcon sx={{ fontSize: 40 }} />,
+};
 
-interface ProjectTemplate {
-  id: TemplateId;
+interface DisplayTemplate {
+  id: TemplateConfig['id'];
   name: string;
   description: string;
   icon: JSX.Element;
   tags: string[];
+  defaultType: string;
+  checklist: TemplateConfig['checklist'];
 }
 
-const PROJECT_TEMPLATES: ProjectTemplate[] = [
-  {
-    id: 'project',
-    name: 'Empty Project',
-    description: 'Start with a blank project',
-    icon: <AlbumIcon sx={{ fontSize: 40 }} />,
-    tags: []
-  },
-  {
-    id: 'single',
-    name: 'Single Release',
-    description: 'Project setup for a single track release',
-    icon: <AudiotrackIcon sx={{ fontSize: 40 }} />,
-    tags: ['single', 'release']
-  },
-  {
-    id: 'album',
-    name: 'Album',
-    description: 'Full album project setup',
-    icon: <LibraryMusicIcon sx={{ fontSize: 40 }} />,
-    tags: ['album', 'release']
-  }
-];
+const PROJECT_TEMPLATES: DisplayTemplate[] = TEMPLATES_CONFIG.map((t) => ({
+  id: t.id,
+  name: t.name,
+  description: t.description,
+  icon: iconMap[t.icon] || <AlbumIcon sx={{ fontSize: 40 }} />,
+  tags: t.tags,
+  defaultType: t.defaultType,
+  checklist: t.checklist,
+}));
 
 interface EmptyProjectPanelProps {
   onClose: () => void;
@@ -89,14 +80,14 @@ interface EmptyProjectPanelProps {
   mode?: 'project' | 'song';
 }
 
-const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({ 
-  onClose, 
-  tripId, 
-  onProjectCreated, 
+const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
+  onClose,
+  tripId: _tripId,
+  onProjectCreated,
   isDialog = false,
-  mode = 'project'
+  mode: _mode = 'project'
 }) => {
-  const { currentUser, artistProfile } = useAuth();
+  const { currentUser, artistProfile: _artistProfile } = useAuth();
   const { refreshTrips } = useTrips();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -107,7 +98,7 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
   const [success, setSuccess] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate>(PROJECT_TEMPLATES[0]);
+  const [selectedTemplate, setSelectedTemplate] = useState<DisplayTemplate>(PROJECT_TEMPLATES[0]);
   const [isPrivate, setIsPrivate] = useState(true);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
 
@@ -131,49 +122,39 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
     }
   }, [newTag, tags]);
 
-  const handleTemplateSelect = (template: ProjectTemplate) => {
+  const handleTemplateSelect = (template: DisplayTemplate) => {
     setSelectedTemplate(template);
-    // Replace tags with the new template's tags instead of adding them
     setTags(template.tags);
 
-    // Set default values based on template type
-    if (template.id === 'single') {
-      setIsPrivate(false); // Singles are typically public
-      if (!title) {
-        setTitle('New Single');
-      }
-      if (!description) {
-        setDescription('Single release project');
-      }
-    } else if (template.id === 'album') {
-      setIsPrivate(true); // Albums start private during creation
-      if (!title) {
-        setTitle('New Album');
-      }
-      if (!description) {
-        setDescription('Album project');
-      }
-    } else {
-      // Empty project template
-      if (!title) {
-        setTitle('New Project');
-      }
-      if (!description) {
-        setDescription('');
-      }
-    }
+    // Set defaults based on template
+    const titleDefaults: Record<string, string> = {
+      project: 'New Project',
+      single: 'New Single',
+      ep: 'New EP',
+      album: 'New Album',
+      mixtape: 'New Mixtape',
+    };
+    const descDefaults: Record<string, string> = {
+      project: '',
+      single: 'Single release project',
+      ep: 'EP project with 3-6 tracks',
+      album: 'Album project',
+      mixtape: 'Mixtape project',
+    };
+
+    if (!title) setTitle(titleDefaults[template.id] || 'New Project');
+    if (!description) setDescription(descDefaults[template.id] || '');
+    setIsPrivate(template.id !== 'single');
   };
 
-  // Add helper text based on template
   const getTemplateHelperText = () => {
-    switch (selectedTemplate.id) {
-      case 'single':
-        return 'Perfect for releasing a single track with artwork and metadata';
-      case 'album':
-        return 'Ideal for a full album release with multiple tracks';
-      default:
-        return 'Start with a blank project and customize as needed';
-    }
+    const helpers: Record<string, string> = {
+      single: 'Perfect for releasing a single track with artwork and metadata',
+      ep: 'Great for an EP release with 3-6 tracks and curated checklists',
+      album: 'Ideal for a full album release with multiple tracks',
+      mixtape: 'Informal collection of tracks for sharing and distribution',
+    };
+    return helpers[selectedTemplate.id] || 'Start with a blank project and customize as needed';
   };
 
   const handleAddTag = (tagToAdd: string) => {
@@ -205,7 +186,7 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
     try {
       // Create a new project with the title as the name
       const newProject = await createTrip({
-        name: title.trim(), // Use the title as the name
+        name: title.trim(),
         description: description || '',
         userId: currentUser.uid,
         songs: [],
@@ -214,12 +195,15 @@ const EmptyProjectPanel: React.FC<EmptyProjectPanelProps> = ({
         collaborators: [],
         tags: tags,
         status: 'draft',
-        type: selectedTemplate.id,
+        type: (selectedTemplate.defaultType || selectedTemplate.id) as Trip['type'],
         isPrivate: isPrivate,
         template: selectedTemplate.id,
         metadata: {
           templateType: selectedTemplate.id,
-          createdFrom: 'project-panel'
+          createdFrom: 'project-panel',
+          checklist: selectedTemplate.checklist.length > 0
+            ? selectedTemplate.checklist.map((item) => ({ ...item, completed: false }))
+            : undefined,
         }
       });
       

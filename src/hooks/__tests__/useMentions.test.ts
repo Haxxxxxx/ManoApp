@@ -2,7 +2,7 @@
  * Unit tests for useMentions hook
  */
 
-import { renderHook, act } from '@testing-library/react';
+import { renderHook } from '@testing-library/react';
 import { useMentions } from '../useMentions';
 
 describe('useMentions', () => {

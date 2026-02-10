@@ -11,11 +11,9 @@ import {
   Paper,
   Chip,
   Stack,
-  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
   CircularProgress,
   Alert
 } from '@mui/material';
@@ -24,7 +22,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { Song } from '../types/song';
 import LocalFileBrowser from './LocalFileBrowser';
-import { LocalFile, convertLocalFileToSong } from '../services/localFileService';
+import { convertLocalFileToSong } from '../services/localFileService';
 import { formatDurationFromString, formatDuration, parseDurationToSeconds } from '../utils/formatters';
 import { useSongs } from '../hooks/useSongs';
 import { getErrorMessage } from '../utils/storageHelpers';

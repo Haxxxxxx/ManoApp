@@ -14,7 +14,6 @@ import {
   Chip,
   Grid,
   IconButton,
-  Tooltip,
   LinearProgress,
   Alert,
   Collapse,
@@ -31,7 +30,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
-import { AIMetadata, SuggestedTag, ApplyAISuggestionsOptions } from '../../types/ai';
+import { AIMetadata, ApplyAISuggestionsOptions } from '../../types/ai';
 import { Song } from '../../types/song';
 
 interface AIMetadataSuggestionsProps {
@@ -51,7 +50,7 @@ interface AIMetadataSuggestionsProps {
 
 const AIMetadataSuggestions: React.FC<AIMetadataSuggestionsProps> = ({
   aiMetadata,
-  song,
+  song: _song,
   onApply,
   onUndo,
   applied = false,

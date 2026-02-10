@@ -4,7 +4,6 @@
  * Types for exporting releases to external platforms (SoundCloud, Spotify, etc.)
  */
 
-import { Release } from './release';
 import { Song } from './song';
 
 /**
@@ -213,5 +212,24 @@ export interface ProviderConnector {
    * Polls provider for async submission status
    */
   getSubmissionStatus?(submissionId: string): Promise<SubmissionResult>;
+}
+
+/**
+ * Supported platform identifiers
+ */
+export type PlatformId = 'soundcloud' | 'spotify' | 'apple' | 'amazon' | 'youtube';
+
+/**
+ * Platform configuration
+ */
+export interface PlatformConfig {
+  id: PlatformId;
+  name: string;
+  icon: string;
+  audioFormat: 'mp3' | 'wav' | 'flac' | 'aiff';
+  requiresAuth: boolean;
+  exportOnly: boolean;
+  maxTitleLength?: number;
+  maxDescriptionLength?: number;
 }
 

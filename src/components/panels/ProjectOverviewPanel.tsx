@@ -8,7 +8,6 @@ import {
   CardContent,
   Button,
   Chip,
-  Divider,
   List,
   ListItem,
   ListItemText,
@@ -18,7 +17,6 @@ import {
   useTheme,
   alpha,
   LinearProgress,
-  CircularProgress,
   Skeleton,
 } from '@mui/material';
 import {
@@ -64,7 +62,7 @@ const ProjectOverviewPanel: React.FC<ProjectOverviewPanelProps> = ({
   trip,
   tripId,
   songs: propSongs,
-  onClose,
+  onClose: _onClose,
   onStatusChange,
   onCreateAlbum,
   onExport,
@@ -186,8 +184,8 @@ const ProjectOverviewPanel: React.FC<ProjectOverviewPanelProps> = ({
         transition: 'all 0.2s ease',
         '&:hover': {
           transform: 'translateY(-4px)',
-          boxShadow: `0px 8px 16px ${alpha(theme.palette[color as keyof typeof theme.palette].main || theme.palette.primary.main, 0.2)}`,
-          borderColor: theme.palette[color as keyof typeof theme.palette].main || theme.palette.primary.main,
+          boxShadow: `0px 8px 16px ${alpha((theme.palette[color as 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'] as { main: string })?.main || theme.palette.primary.main, 0.2)}`,
+          borderColor: (theme.palette[color as 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'] as { main: string })?.main || theme.palette.primary.main,
         },
       }}
     >
@@ -201,8 +199,8 @@ const ProjectOverviewPanel: React.FC<ProjectOverviewPanelProps> = ({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              bgcolor: alpha(theme.palette[color as keyof typeof theme.palette].main || theme.palette.primary.main, 0.1),
-              color: theme.palette[color as keyof typeof theme.palette].main || theme.palette.primary.main,
+              bgcolor: alpha((theme.palette[color as 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'] as { main: string })?.main || theme.palette.primary.main, 0.1),
+              color: (theme.palette[color as 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'] as { main: string })?.main || theme.palette.primary.main,
             }}
           >
             {icon}

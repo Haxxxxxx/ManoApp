@@ -5,8 +5,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
   CircularProgress,
   Paper,
   Chip,
@@ -103,7 +101,7 @@ const CollaborativeTrips: React.FC = () => {
                     />
                     <AccessTimeIcon sx={{ fontSize: 16 }} />
                     <Typography variant="caption">
-                      {new Date(trip.updatedAt).toLocaleDateString()}
+                      {trip.updatedAt ? new Date(trip.updatedAt).toLocaleDateString() : 'N/A'}
                     </Typography>
                   </Box>
                 }

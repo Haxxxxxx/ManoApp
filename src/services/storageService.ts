@@ -1,12 +1,10 @@
 import { ref, listAll, getDownloadURL, uploadBytes, deleteObject, FirebaseStorage, uploadBytesResumable } from 'firebase/storage';
 import { storage } from '../firebase/config';
-import { adminUploadFile, adminDeleteFile } from './adminService';
 import { FILE_SIZE_LIMITS, ALLOWED_AUDIO_TYPES, ALLOWED_IMAGE_TYPES, UPLOAD_CHUNK_SIZE } from '../utils/constants';
 import { retry } from '../utils/retry';
 
 const SHARED_DRIVE_FOLDER = 'shared-drive';
 const NOTION_TEMPLATES_FOLDER = 'notion-templates';
-const MUSIC_FILES_FOLDER = 'music-files';
 const COVER_ART_FOLDER = 'cover-art';
 
 // Helper function to check if storage is available
@@ -100,7 +98,7 @@ export const storageService = {
     }
   },
 
-  async uploadFileInChunks(file: File, path: string, chunkSize = UPLOAD_CHUNK_SIZE, onProgress?: (progress: number) => void): Promise<string> {
+  async uploadFileInChunks(file: File, path: string, _chunkSize = UPLOAD_CHUNK_SIZE, onProgress?: (progress: number) => void): Promise<string> {
     const storageInstance = checkStorage();
 
     try {
@@ -368,7 +366,7 @@ export const uploadStemFiles = async (
           },
           async () => {
             try {
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              await getDownloadURL(uploadTask.snapshot.ref);
               uploadedPaths.push(filePath);
               completedFiles++;
               

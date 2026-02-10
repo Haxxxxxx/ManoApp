@@ -25,18 +25,74 @@ export interface FeatureFlags {
   
   /** SoundCloud connector integration */
   soundcloud: boolean;
+  
+  /** Distributor orchestrator and provider registry */
+  distributor: boolean;
+  
+  /** Audio fingerprinting and duplicate detection */
+  fingerprint: boolean;
+  
+  /** Export presets for provider-specific settings */
+  exportPresets: boolean;
+
+  /** Split-sheet generation and signing */
+  splitSheet: boolean;
+
+  /** Batch operations for songs and assets */
+  batchOperations: boolean;
+
+  /** Multi-platform publish support */
+  multiPlatformPublish: boolean;
+
+  /** Analytics dashboard */
+  analytics: boolean;
+
+  /** Global search / command palette */
+  globalSearch: boolean;
+
+  /** Notification center with real-time updates */
+  notificationCenter: boolean;
+
+  /** Song metadata completeness indicator */
+  metadataCompleteness: boolean;
+
+  /** Dashboard activity feed */
+  activityFeed: boolean;
+
+  /** Keyboard shortcuts with guide dialog */
+  keyboardShortcuts: boolean;
+
+  /** Smart project templates with checklists */
+  smartTemplates: boolean;
+
+  /** Quick actions context menu on right-click */
+  quickActions: boolean;
 }
 
 /**
  * Default feature flags - all features disabled by default
  */
 export const featureFlags: FeatureFlags = {
-  aiMetadata: false,
+  aiMetadata: true,
   stemsAndMixer: false,
-  releaseChecklist: false,
-  comments: false,
+  releaseChecklist: true,
+  comments: true,
   gdriveImport: false,
-  soundcloud: false,
+  soundcloud: true,
+  distributor: false,
+  fingerprint: false,
+  exportPresets: true,
+  splitSheet: false,
+  batchOperations: true,
+  multiPlatformPublish: true,
+  analytics: true,
+  globalSearch: true,
+  notificationCenter: true,
+  metadataCompleteness: true,
+  activityFeed: true,
+  keyboardShortcuts: true,
+  smartTemplates: true,
+  quickActions: true,
 };
 
 /**
@@ -73,4 +129,28 @@ export const getEnabledFeatures = (): Array<keyof FeatureFlags> => {
     (key) => featureFlags[key as keyof FeatureFlags]
   ) as Array<keyof FeatureFlags>;
 };
+
+/**
+ * Initialize feature flags from Firestore (optional)
+ * Falls back to hardcoded defaults if Firestore is unavailable
+ */
+export async function initFeatureFlags(): Promise<void> {
+  try {
+    const { doc, getDoc } = await import('firebase/firestore');
+    const { db } = await import('../firebase/config');
+    if (!db) return;
+
+    const flagsDoc = await getDoc(doc(db, 'config', 'featureFlags'));
+    if (flagsDoc.exists()) {
+      const remoteFlags = flagsDoc.data() as Partial<FeatureFlags>;
+      for (const key of Object.keys(remoteFlags) as Array<keyof FeatureFlags>) {
+        if (key in featureFlags && typeof remoteFlags[key] === 'boolean') {
+          featureFlags[key] = remoteFlags[key]!;
+        }
+      }
+    }
+  } catch {
+    // Firestore unavailable, using hardcoded defaults
+  }
+}
 

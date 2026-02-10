@@ -15,15 +15,21 @@ interface ProjectsSectionProps {
   onTripClick: (trip: Trip) => void;
   onDeleteTrip: (trip: Trip) => void;
   onCreateNew: () => void;
+  onContextMenu?: (e: React.MouseEvent, trip: Trip) => void;
+  isSelected?: (id: string) => boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-const ProjectsSection: React.FC<ProjectsSectionProps> = ({ 
-  title, 
-  trips, 
-  loading, 
-  onTripClick, 
-  onDeleteTrip, 
-  onCreateNew 
+const ProjectsSection: React.FC<ProjectsSectionProps> = ({
+  title,
+  trips,
+  loading,
+  onTripClick,
+  onDeleteTrip,
+  onCreateNew,
+  onContextMenu,
+  isSelected,
+  onToggleSelect,
 }: ProjectsSectionProps) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -87,6 +93,9 @@ const ProjectsSection: React.FC<ProjectsSectionProps> = ({
                 trip={trip}
                 onTripClick={onTripClick}
                 onDeleteTrip={onDeleteTrip}
+                onContextMenu={onContextMenu}
+                selected={isSelected ? isSelected(trip.id) : false}
+                onToggleSelect={onToggleSelect}
               />
             </Grid>
           ))}

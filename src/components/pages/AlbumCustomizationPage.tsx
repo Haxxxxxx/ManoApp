@@ -6,15 +6,7 @@ import {
   Grid,
   TextField,
   Button,
-  Card,
-  CardContent,
-  CardMedia,
   IconButton,
-  Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
   useTheme,
   alpha,
@@ -44,12 +36,9 @@ import {
   DragIndicator as DragIndicatorIcon,
   Add as AddIcon,
   Remove as RemoveIcon,
-  ArrowUpward as ArrowUpwardIcon,
-  ArrowDownward as ArrowDownwardIcon,
   MusicNote as MusicNoteIcon,
   Folder as FolderIcon,
   Cloud as CloudIcon,
-  Storage as StorageIcon,
   Close as CloseIcon,
   Clear as ClearIcon,
   ArrowBack as ArrowBackIcon
@@ -58,16 +47,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTrips } from '../../contexts/TripContext';
 import { Song } from '../../types/song';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { getUserSongs, getSongs } from '../../services/firebaseService';
-import { createAlbum, getAlbum, updateAlbum, deleteAlbum } from '../../services/firebaseService';
-import type { Album, AlbumSong } from '../../types/album';
+import { createAlbum, getAlbum, updateAlbum } from '../../services/firebaseService';
+import type { AlbumSong } from '../../types/album';
 import { debounce } from 'lodash';
 import { formatDuration, parseDurationToSeconds } from '../../utils/formatters';
 import { STORAGE_KEYS, storageHelpers } from '../../utils/storageHelpers';
 import { validateTitle, validateArtist, validateGenre, validateDescription } from '../../utils/validation';
 import { FORM_LIMITS } from '../../utils/constants';
-import { createDevPlaceholderAlbum, isDevPlaceholderAlbum } from '../../utils/devPlaceholder';
+import { createDevPlaceholderAlbum } from '../../utils/devPlaceholder';
 
 type SongSource = 'local' | 'project' | 'firebase';
 
@@ -112,10 +101,9 @@ const mapSourceType = (source: SongSource | undefined): SongSource | undefined =
 const AlbumCustomizationPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { currentUser, artistProfile } = useAuth();
+  const { currentUser, artistProfile: _artistProfile } = useAuth();
   const { trips } = useTrips();
   const { albumId } = useParams();
-  const [album, setAlbum] = useState<Album | null>(null);
   const [albumData, setAlbumData] = useState({
     title: '',
     artist: '',
@@ -134,7 +122,6 @@ const AlbumCustomizationPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [editingSong, setEditingSong] = useState<ExtendedSong | null>(null);
   const [lastSavedData, setLastSavedData] = useState<string>('');
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [formErrors, setFormErrors] = useState<FormErrors>({
     title: { error: false, message: '' },
     artist: { error: false, message: '' },
@@ -249,10 +236,8 @@ const AlbumCustomizationPage = () => {
     debounce((data: { albumData: typeof albumData; selectedSongs: typeof selectedSongs }) => {
       try {
         storageHelpers.setItem(STORAGE_KEYS.ALBUM_DRAFT, data);
-        setSaveStatus('saved');
       } catch (err) {
         // Error saving draft
-        setSaveStatus('error');
       }
     }, 1000),
     []
@@ -263,7 +248,6 @@ const AlbumCustomizationPage = () => {
     if (!albumId) {  // Only autosave for new albums
       const currentData = JSON.stringify({ albumData, selectedSongs });
       if (currentData !== lastSavedData) {
-        setSaveStatus('saving');
         saveToLocalStorage({ albumData, selectedSongs });
         setLastSavedData(currentData);
       }
@@ -278,7 +262,6 @@ const AlbumCustomizationPage = () => {
       // Check if this is a dev placeholder album
       if (import.meta.env.DEV && albumId === 'dev-placeholder-album') {
         const devAlbum = createDevPlaceholderAlbum();
-        setAlbum(devAlbum);
         setAlbumData({
           title: devAlbum.title,
           artist: devAlbum.artist,
@@ -397,13 +380,6 @@ const AlbumCustomizationPage = () => {
 
   const handleRemoveSong = (songId: string) => {
     setSelectedSongs(prev => prev.filter(song => song.id !== songId));
-  };
-
-  const handleMoveSong = (fromIndex: number, toIndex: number) => {
-    const newSongs = [...selectedSongs];
-    const [movedSong] = newSongs.splice(fromIndex, 1);
-    newSongs.splice(toIndex, 0, movedSong);
-    setSelectedSongs(newSongs);
   };
 
   const handleDragEnd = (result: DropResult) => {

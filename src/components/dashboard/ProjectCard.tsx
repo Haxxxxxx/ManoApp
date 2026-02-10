@@ -6,10 +6,11 @@ import {
   Typography,
   Box,
   IconButton,
+  Checkbox,
   alpha,
   useTheme,
   Tooltip,
-  Chip
+  Chip,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AlbumIcon from '@mui/icons-material/Album';
@@ -24,12 +25,18 @@ interface ProjectCardProps {
   trip: Trip;
   onTripClick: (trip: Trip) => void;
   onDeleteTrip: (trip: Trip) => void;
+  onContextMenu?: (e: React.MouseEvent, trip: Trip) => void;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ 
-  trip, 
-  onTripClick, 
-  onDeleteTrip 
+const ProjectCard: React.FC<ProjectCardProps> = ({
+  trip,
+  onTripClick,
+  onDeleteTrip,
+  onContextMenu,
+  selected = false,
+  onToggleSelect,
 }) => {
   const theme = useTheme();
   const isDev = isDevPlaceholder(trip);
@@ -43,14 +50,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       elevation={0}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onContextMenu={onContextMenu ? (e) => onContextMenu(e, trip) : undefined}
       sx={{
         borderRadius: 3,
         overflow: 'hidden',
-        border: '1px solid',
-        borderColor: 'divider',
+        border: '2px solid',
+        borderColor: selected ? 'primary.main' : 'divider',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
         position: 'relative',
+        bgcolor: selected ? alpha(theme.palette.primary.main, 0.04) : 'background.paper',
         '&:hover': {
           transform: 'translateY(-8px) scale(1.02)',
           boxShadow: '0px 12px 24px rgba(0, 0, 0, 0.15)',
@@ -61,6 +70,29 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         }
       }}
     >
+      {/* Selection checkbox */}
+      {onToggleSelect && (
+        <Checkbox
+          checked={selected}
+          onChange={(e) => {
+            e.stopPropagation();
+            onToggleSelect(trip.id);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          size="small"
+          sx={{
+            position: 'absolute',
+            top: 4,
+            left: 4,
+            zIndex: 4,
+            bgcolor: 'background.paper',
+            borderRadius: 1,
+            opacity: isHovered || selected ? 1 : 0,
+            transition: 'opacity 0.2s ease',
+            '&:hover': { bgcolor: 'background.paper' },
+          }}
+        />
+      )}
       <Box 
         onClick={() => onTripClick(trip)}
         sx={{ height: '100%' }}

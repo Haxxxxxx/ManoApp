@@ -100,25 +100,27 @@ export const exportMixtapeForSoundCloud = async (
 
   try {
     const zip = new JSZip();
-    
+    const skippedSongs: Array<{ title: string; reason: string }> = [];
+
     // Create a folder for each song
     for (let i = 0; i < songs.length; i++) {
       const song = songs[i];
-      
+
       if (!song.filePath) {
+        skippedSongs.push({ title: song.title, reason: 'No audio file available' });
         continue;
       }
-      
+
       // Create a folder for this song
       const songFolder = zip.folder(sanitizeFilename(song.title));
       if (!songFolder) continue;
-      
+
       // Fetch audio blob using utility function
       let audioBlob: Blob;
       try {
         audioBlob = await fetchAudioBlob(song.filePath);
       } catch (error) {
-        // Skip this song if we can't fetch it
+        skippedSongs.push({ title: song.title, reason: `Failed to fetch: ${getErrorMessage(error, 'Unknown error')}` });
         continue;
       }
 
@@ -199,7 +201,13 @@ Instructions:
 `;
     
     zip.file('mixtape_instructions.txt', mixtapeInfoText);
-    
+
+    // Include skipped songs report if any songs were skipped
+    if (skippedSongs.length > 0) {
+      const skippedReport = `Skipped Songs Report\n====================\n\n${skippedSongs.length} song(s) could not be exported:\n\n${skippedSongs.map((s, i) => `${i + 1}. "${s.title}" - ${s.reason}`).join('\n')}\n`;
+      zip.file('skipped_songs_report.txt', skippedReport);
+    }
+
     const content = await zip.generateAsync({ 
       type: 'blob',
       compression: 'DEFLATE',

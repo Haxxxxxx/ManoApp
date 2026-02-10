@@ -4,20 +4,17 @@
  * Component for composing comments with @mention autocomplete
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Box,
   TextField,
   Button,
   Paper,
   List,
-  ListItem,
   ListItemButton,
   ListItemText,
   Avatar,
   Typography,
-  useTheme,
-  alpha,
 } from '@mui/material';
 import { Send as SendIcon } from '@mui/icons-material';
 import { useMentions } from '../../hooks/useMentions';
@@ -33,16 +30,16 @@ interface Collaborator {
 interface CommentComposerProps {
   /** Collaborators for @mention autocomplete */
   collaborators: Collaborator[];
-  
+
   /** Callback when comment is submitted */
   onSubmit: (comment: Omit<Comment, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  
+
   /** Reply to comment ID (optional) */
   replyTo?: string;
-  
+
   /** Placeholder text */
   placeholder?: string;
-  
+
   /** Whether composer is disabled */
   disabled?: boolean;
 }
@@ -54,11 +51,9 @@ const CommentComposer: React.FC<CommentComposerProps> = ({
   placeholder = 'Add a comment...',
   disabled = false,
 }) => {
-  const theme = useTheme();
   const [text, setText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const textFieldRef = useRef<HTMLInputElement>(null);
-  const [cursorPosition, setCursorPosition] = useState(0);
 
   const mentions = useMentions({
     collaborators,
@@ -105,7 +100,6 @@ const CommentComposer: React.FC<CommentComposerProps> = ({
           value={text}
           onChange={(e) => {
             setText(e.target.value);
-            setCursorPosition(e.target.selectionStart || 0);
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}

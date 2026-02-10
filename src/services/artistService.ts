@@ -1,11 +1,6 @@
 import { db } from '../firebase/config';
-import { collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, Firestore, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { ArtistProfile } from '../types/artist';
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const createArtistProfile = async (userId: string, profileData: Partial<ArtistProfile>): Promise<ArtistProfile> => {
   if (!db) {

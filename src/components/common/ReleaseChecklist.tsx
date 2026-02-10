@@ -11,7 +11,6 @@ import {
   LinearProgress,
   Paper,
   Button,
-  IconButton,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { ChecklistItem as ChecklistItemType, Release } from '../../types/release';

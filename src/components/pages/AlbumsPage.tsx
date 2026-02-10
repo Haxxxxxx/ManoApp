@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -7,15 +7,12 @@ import {
   CardContent, 
   CardMedia, 
   Button, 
-  IconButton, 
-  Chip, 
-  CircularProgress, 
+  Chip,
   Alert,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
   Divider,
   Tooltip,
   alpha,
@@ -29,10 +26,7 @@ import {
   Delete as DeleteIcon, 
   Album as AlbumIcon,
   MusicNote as MusicNoteIcon,
-  CalendarToday as CalendarIcon,
-  Person as PersonIcon,
-  Visibility as VisibilityIcon,
-  ArrowBack as ArrowBackIcon
+  CalendarToday as CalendarIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';

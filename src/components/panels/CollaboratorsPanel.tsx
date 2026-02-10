@@ -3,13 +3,11 @@ import {
   Box,
   Typography,
   TextField,
-  Button,
   List,
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
   IconButton,
-  Chip,
   CircularProgress,
   Autocomplete,
   Avatar,
@@ -21,18 +19,14 @@ import {
 import {
   Person as PersonIcon,
   Delete as DeleteIcon,
-  Search as SearchIcon,
 } from '@mui/icons-material';
-import { 
-  searchArtists, 
-  getAllArtists, 
-  updateTripCollaborators,
-  logTripActivity,
+import {
+  searchArtists,
+  getAllArtists,
   getTrip
 } from '../../services/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArtistProfile } from '../../types/artist';
-import type { ActivityItem } from '../../types/activity';
 import { inviteCollaborator, removeCollaborator } from '../../services/firebaseService';
 import { getErrorMessage } from '../../utils/storageHelpers';
 
@@ -51,7 +45,6 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   const [allArtists, setAllArtists] = useState<ArtistProfile[]>([]);
   const [potentialCollaborators, setPotentialCollaborators] = useState<ArtistProfile[]>([]);
   const [currentCollaborators, setCurrentCollaborators] = useState<ArtistProfile[]>([]);
-  const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -78,7 +71,6 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
   // Fetch all artists and separate them into current and potential collaborators
   useEffect(() => {
     const fetchArtists = async () => {
-      setLoading(true);
       try {
         const artists = await getAllArtists();
         
@@ -98,8 +90,6 @@ const CollaboratorsPanel: React.FC<CollaboratorsPanelProps> = ({
       } catch (err) {
         setError('Failed to load artists');
         // Error fetching artists
-      } finally {
-        setLoading(false);
       }
     };
 

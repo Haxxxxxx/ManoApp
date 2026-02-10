@@ -1,6 +1,14 @@
 import { Song } from '../types/index';
 import { removeFileExtension } from '../utils/formatters';
 
+// Add type declarations for File System Access API
+declare global {
+  interface FileSystemFileHandle extends FileSystemHandle {
+    kind: 'file';
+    getFile(): Promise<File>;
+  }
+}
+
 export interface LocalFile {
   name: string;
   path: string;
@@ -19,10 +27,12 @@ export const convertLocalFileToSong = (file: LocalFile): Song => {
     userId: 'local', // Default user ID for local files
     metadata: {
       // Add custom properties that won't conflict with the type
-      _source: 'local',
+      source: 'local' as const,
       _originalFileName: file.name,
       _fileSize: file.size,
-      _lastModified: file.lastModified.toISOString()
+      _lastModified: file.lastModified.getTime(),
+      tags: [],
+      genre: []
     }
   };
 };
@@ -32,11 +42,16 @@ export const scanDirectory = async (directoryHandle: FileSystemDirectoryHandle):
   const allowedExtensions = ['.mp3', '.wav', '.ogg', '.m4a'];
 
   try {
+    const entries: FileSystemHandle[] = [];
     for await (const entry of directoryHandle.values()) {
-      if (entry.kind === 'file') {
+      entries.push(entry);
+    }
+
+    for (const entry of entries) {
+      if (entry.kind === 'file' && entry instanceof FileSystemFileHandle) {
         const file = await entry.getFile();
         const extension = '.' + file.name.split('.').pop()?.toLowerCase();
-        
+
         if (allowedExtensions.includes(extension)) {
           audioFiles.push({
             name: file.name,
@@ -46,7 +61,7 @@ export const scanDirectory = async (directoryHandle: FileSystemDirectoryHandle):
             lastModified: new Date(file.lastModified)
           });
         }
-      } else if (entry.kind === 'directory') {
+      } else if (entry.kind === 'directory' && entry instanceof FileSystemDirectoryHandle) {
         // Recursively scan subdirectories
         const subFiles = await scanDirectory(entry);
         audioFiles.push(...subFiles);
@@ -76,7 +91,7 @@ export const getAudioMetadata = async (file: File): Promise<{
       });
     });
 
-    audio.addEventListener('error', (error) => {
+    audio.addEventListener('error', (_error) => {
       URL.revokeObjectURL(audio.src);
       reject(new Error('Failed to load audio file for metadata extraction'));
     });

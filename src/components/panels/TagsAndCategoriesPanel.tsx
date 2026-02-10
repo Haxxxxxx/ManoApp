@@ -1,10 +1,8 @@
-import { Box, Typography, Paper, TextField, Chip, IconButton, Button, Dialog, DialogTitle, DialogContent, DialogActions, useTheme } from '@mui/material';
+import { Box, Typography, Paper, TextField, Chip, Button, Dialog, DialogTitle, DialogContent, DialogActions, useTheme } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { Song } from '../../types';
 import { updateSong } from '../../services/firebaseService';
-import { getErrorMessage } from '../../utils/storageHelpers';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
 
 interface TagsAndCategoriesPanelProps {
   songs: Song[];
@@ -12,14 +10,14 @@ interface TagsAndCategoriesPanelProps {
   onSongsUpdated?: (updatedSongs: Song[]) => void;
 }
 
-const TagsAndCategoriesPanel = ({ songs, onClose, onSongsUpdated }: TagsAndCategoriesPanelProps) => {
+const TagsAndCategoriesPanel = ({ songs, onClose: _onClose, onSongsUpdated }: TagsAndCategoriesPanelProps) => {
   const theme = useTheme();
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [newTags, setNewTags] = useState<{ [key: string]: string }>({});
   const [allTags, setAllTags] = useState<string[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [activeInputId, setActiveInputId] = useState<string | null>(null);
-  const [filteredTags, setFilteredTags] = useState<string[]>([]);
+  const [_filteredTags, setFilteredTags] = useState<string[]>([]);
   const [localSongs, setLocalSongs] = useState<Song[]>(songs);
 
   // Default tags for different genres and moods

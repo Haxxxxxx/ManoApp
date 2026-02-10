@@ -1,48 +1,46 @@
 rules_version = '2';
 
-// Craft rules based on data in your Firestore database
-// allow write: if firestore.get(
-//    /databases/(default)/documents/users/$(request.auth.uid)).data.isAdmin;
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow all access in development
+    // Global catch-all: require authentication for all paths
     match /{allPaths=**} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
-    
+
     // Allow access to music files for authenticated users
     match /music-files/{tripId}/{fileName} {
-      allow read: if true;  // Temporarily allow all access for development
-      allow write: if true;  // Temporarily allow all access for development
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
-    
+
     // Allow access to cover art for authenticated users
     match /cover-art/{tripId}/{fileName} {
-      allow read: if true;  // Temporarily allow all access for development
-      allow write: if true;  // Temporarily allow all access for development
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
-    
+
     // Allow access to shared drive files for authenticated users
     match /shared-drive/{fileName} {
-      allow read: if true;  // Temporarily allow all access for development
-      allow write: if true;  // Temporarily allow all access for development
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
-    
+
     // Allow access to notion templates for authenticated users
     match /notion-templates/{fileName} {
-      allow read: if true;  // Temporarily allow all access for development
-      allow write: if true;  // Temporarily allow all access for development
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
-    
+
     // Allow access to stems for authenticated users
     match /stems/{tripId}/{songId}/{fileName} {
-      allow read: if true;  // Temporarily allow all access for development
-      allow write: if true;  // Temporarily allow all access for development
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
-    
-    // Allow access to user-specific files
+
+    // Allow access to user-specific files (only owner can write)
     match /users/{userId}/{fileName} {
-      allow read, write: if true;  // Temporarily allow all access for development
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == userId;
     }
   }
 }

@@ -14,8 +14,9 @@ import {
   generateOAuthState,
   validateOAuthState,
 } from './auth';
-import { listFiles, downloadFile, computeHash, validateMimeType } from './service';
+import { listFiles, downloadFile, computeHash, validateMimeType, getFileMetadata } from './service';
 import { getStorage } from 'firebase-admin/storage';
+import { computeFileIdentifiers } from '../../services/fingerprint/fingerprintService';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {
@@ -167,6 +168,17 @@ export const importGoogleDriveFile = onCall(
 
       // Download file from Google Drive
       logger.info(`Downloading file ${fileId} from Google Drive for user ${userId}`);
+
+      // Check file size before downloading (200MB limit)
+      const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
+      const fileMetadata = await getFileMetadata(userId, fileId);
+      if (fileMetadata.size && parseInt(fileMetadata.size, 10) > MAX_FILE_SIZE) {
+        throw new HttpsError(
+          'invalid-argument',
+          `File too large (${Math.round(parseInt(fileMetadata.size, 10) / (1024 * 1024))}MB). Maximum allowed size is 200MB.`
+        );
+      }
+
       const { buffer, mimeType, filename } = await downloadFile(userId, fileId);
 
       // Validate MIME type
@@ -177,16 +189,37 @@ export const importGoogleDriveFile = onCall(
         );
       }
 
-      // Compute SHA256 hash
+      // Compute hash and fingerprint
       const hash = computeHash(buffer);
+      let fingerprint: string | undefined;
+      
+      // Compute fingerprint if feature enabled (for audio files)
+      if (mimeType.startsWith('audio/')) {
+        try {
+          const identifiers = await computeFileIdentifiers(buffer);
+          fingerprint = identifiers.fingerprint;
+        } catch (error) {
+          logger.warn('Failed to compute fingerprint, continuing with hash only', error);
+        }
+      }
 
-      // Check for duplicate (existing asset with same hash)
-      const existingAsset = await db
+      // Check for duplicate (existing asset with same hash or fingerprint)
+      let existingAsset = await db
         .collection('assets')
         .where('hash', '==', hash)
         .where('userId', '==', userId)
         .limit(1)
         .get();
+
+      // Also check by fingerprint if available
+      if (existingAsset.empty && fingerprint) {
+        existingAsset = await db
+          .collection('assets')
+          .where('fingerprint', '==', fingerprint)
+          .where('userId', '==', userId)
+          .limit(1)
+          .get();
+      }
 
       if (!existingAsset.empty) {
         const existing = existingAsset.docs[0].data();
@@ -194,6 +227,10 @@ export const importGoogleDriveFile = onCall(
           assetId: existingAsset.docs[0].id,
           duplicate: true,
           message: 'File already imported',
+          existingAsset: {
+            id: existingAsset.docs[0].id,
+            ...existing,
+          },
         };
       }
 
@@ -229,6 +266,7 @@ export const importGoogleDriveFile = onCall(
         mimeType,
         size: buffer.length,
         hash,
+        ...(fingerprint && { fingerprint }),
         source: 'google-drive',
         originUrl: `https://drive.google.com/file/d/${fileId}/view`,
         storagePath,

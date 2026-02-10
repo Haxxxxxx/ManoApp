@@ -8,11 +8,15 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import ExportPanel from '../ExportPanel';
 import { ReleaseManifest, PreflightResult, SubmissionResult } from '../../types/export';
+import type { PlatformConfig } from '../../types/export';
 import { Release } from '../../types/release';
 import { Song } from '../../types/song';
 import { SoundCloudConnector } from '../../services/export/connectors/soundcloudConnector';
+import { getAllPlatforms, getConnector } from '../../services/export/connectors/connectorRegistry';
+import { createSubmission } from '../../services/submissionService';
 import { isFeatureEnabled } from '../../config/features';
 import { useToast } from '../../hooks/useToast';
+import { distributeRelease, getSubmissions } from '../../services/orchestratorService';
 
 interface ReleaseExportPanelProps {
   release: Release;
@@ -25,7 +29,6 @@ interface ReleaseExportPanelProps {
 const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
   release,
   songs,
-  collaborators = [],
   onClose,
   onExportComplete,
 }) => {
@@ -33,6 +36,14 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
   const [manifest, setManifest] = useState<ReleaseManifest | undefined>();
   const [preflightResult, setPreflightResult] = useState<PreflightResult | undefined>();
   const [exportHistory, setExportHistory] = useState<any[]>([]);
+  const [exporting, setExporting] = useState(false);
+
+  // Load submission history
+  useEffect(() => {
+    if (release?.id && isFeatureEnabled('distributor')) {
+      loadSubmissionHistory();
+    }
+  }, [release?.id]);
 
   useEffect(() => {
     if (!isFeatureEnabled('soundcloud')) {
@@ -103,7 +114,80 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
     }
   };
 
+  const loadSubmissionHistory = async () => {
+    if (!release?.id) return;
+    
+    try {
+      const submissions = await getSubmissions(release.id);
+      const history = Object.entries(submissions).map(([providerId, submission]) => ({
+        id: submission.submissionId || providerId,
+        provider: submission.providerName || providerId,
+        status: submission.status,
+        submittedAt: submission.submittedAt,
+        result: {
+          submissionId: submission.submissionId,
+          status: submission.status,
+          error: submission.error,
+          providerUrl: submission.providerUrl,
+          submittedAt: submission.submittedAt,
+          completedAt: submission.completedAt,
+        },
+      }));
+      setExportHistory(history);
+    } catch (error) {
+      console.error('Failed to load submission history:', error);
+    }
+  };
+
   const handleSubmit = async (
+    manifest: ReleaseManifest,
+    providerIds: string[]
+  ): Promise<SubmissionResult[]> => {
+    if (!isFeatureEnabled('distributor')) {
+      // Fallback to direct connector if orchestrator not enabled
+      return handleSubmitDirect(manifest, providerIds);
+    }
+
+    if (!providerIds || providerIds.length === 0) {
+      const error = new Error('No export providers selected');
+      showError(error.message);
+      throw error;
+    }
+
+    setExporting(true);
+    try {
+      // Use orchestrator service
+      const submissions = await distributeRelease(release.id, providerIds);
+      
+      // Convert to SubmissionResult format
+      const results: SubmissionResult[] = Object.entries(submissions).map(([providerId, submission]) => ({
+        submissionId: submission.submissionId || `pending-${providerId}`,
+        status: submission.status,
+        error: submission.error,
+        providerUrl: submission.providerUrl,
+        providerData: submission.providerData,
+        submittedAt: submission.submittedAt,
+        completedAt: submission.completedAt,
+      }));
+
+      // Reload history
+      await loadSubmissionHistory();
+
+      showSuccess(`Distribution started for ${providerIds.length} provider(s)`);
+      onExportComplete?.();
+
+      return results;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to distribute release: ${errorMessage}`);
+      throw error;
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Fallback to direct connector submission (old method)
+  const handleSubmitDirect = async (
     manifest: ReleaseManifest,
     providerIds: string[]
   ): Promise<SubmissionResult[]> => {
@@ -113,52 +197,47 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
       throw error;
     }
 
-    if (!providerIds || providerIds.length === 0) {
-      const error = new Error('No export providers selected');
-      showError(error.message);
-      throw error;
-    }
-
     const results: SubmissionResult[] = [];
 
     for (const providerId of providerIds) {
       try {
-        if (providerId === 'soundcloud') {
-          const connector = new SoundCloudConnector();
-          
-          // Prepare payload
-          const payload = await connector.prepare(manifest);
-          
-          // Submit to provider
-          const result = await connector.submit(payload);
-          results.push(result);
+        const connector = getConnector(providerId as any);
+        const payload = await connector.prepare(manifest);
+        const result = await connector.submit(payload);
+        results.push(result);
 
-          // Add to history
-          setExportHistory((prev) => [
-            ...prev,
-            {
-              id: result.submissionId,
-              provider: 'SoundCloud',
-              status: result.status,
-              submittedAt: result.submittedAt,
-              result,
-            },
-          ]);
+        // Track submission
+        try {
+          await createSubmission({
+            releaseId: release.id,
+            platformId: providerId,
+            userId: '',
+            status: result.status,
+            submissionId: result.submissionId,
+            providerUrl: result.providerUrl,
+            submittedAt: result.submittedAt,
+            completedAt: result.completedAt,
+          });
+        } catch {
+          // submission tracking is non-critical
+        }
 
-          if (result.status === 'completed') {
-            showSuccess(`Successfully exported to ${providerId}`);
-          } else if (result.status === 'failed') {
-            showError(`Export to ${providerId} failed: ${result.error || 'Unknown error'}`);
-          } else {
-            showError(`Export to ${providerId} is pending`);
-          }
-        } else {
-          throw new Error(`Unsupported provider: ${providerId}`);
+        setExportHistory(prev => [...prev, {
+          id: result.submissionId,
+          provider: connector.name,
+          status: result.status,
+          submittedAt: result.submittedAt,
+          result,
+        }]);
+
+        if (result.status === 'completed') {
+          showSuccess(`Successfully exported for ${connector.name}`);
+        } else if (result.status === 'failed') {
+          showError(`Export for ${connector.name} failed: ${result.error || 'Unknown error'}`);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         showError(`Failed to export to ${providerId}: ${errorMessage}`);
-        console.error(`Error exporting to ${providerId}:`, error);
         results.push({
           submissionId: `error-${Date.now()}-${providerId}`,
           status: 'failed',
@@ -175,11 +254,11 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
     return results;
   };
 
-  if (!isFeatureEnabled('soundcloud')) {
+  if (!isFeatureEnabled('soundcloud') && !isFeatureEnabled('distributor')) {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="info">
-          SoundCloud export is not enabled. Please enable it in feature flags.
+          Export features are not enabled. Please enable distributor or soundcloud in feature flags.
         </Alert>
         <Button onClick={onClose} sx={{ mt: 2 }}>
           Close
@@ -219,13 +298,16 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
       </Typography>
       <ExportPanel
         manifest={manifest}
-        providers={[
-          { id: 'soundcloud', name: 'SoundCloud', enabled: isFeatureEnabled('soundcloud') },
-        ]}
+        providers={getAllPlatforms().map(p => ({
+          id: p.id,
+          name: p.name,
+          enabled: true,
+        }))}
         preflightResult={preflightResult}
         onRunPreflight={handleRunPreflight}
         onSubmit={handleSubmit}
         exportHistory={exportHistory}
+        exporting={exporting}
       />
       <ToastComponent />
     </Box>

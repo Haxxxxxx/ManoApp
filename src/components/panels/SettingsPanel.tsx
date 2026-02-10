@@ -12,25 +12,16 @@ import {
   Divider,
   Alert,
   CircularProgress,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  ListItemSecondaryAction,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   useTheme,
-  alpha,
   LinearProgress,
   Slider,
-  InputAdornment,
   Grid,
   Card,
   CardContent,
-  Tooltip,
   Select,
   MenuItem,
   FormControl,
@@ -38,26 +29,20 @@ import {
 } from '@mui/material';
 import {
   Person as PersonIcon,
-  Notifications as NotificationsIcon,
   Security as SecurityIcon,
   Storage as StorageIcon,
   Palette as PaletteIcon,
-  Language as LanguageIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
   ColorLens as ColorLensIcon,
-  DarkMode as DarkModeIcon,
   TextFields as TextFieldsIcon,
   Animation as AnimationIcon,
   BorderAll as BorderRadiusIcon,
-  SpaceBar as SpaceBarIcon,
-  FontDownload as FontDownloadIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { updateUserProfile, deleteAccount } from '../../services/firebaseService';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { deleteAccount } from '../../services/firebaseService';
 import { useThemeSettings, ThemeSettings, defaultSettings } from '../../contexts/ThemeContext';
 import { ChromePicker, ColorResult } from 'react-color';
 
@@ -91,7 +76,7 @@ interface SettingsPanelProps {
   onClose: () => void;
 }
 
-const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
+const SettingsPanel: FC<SettingsPanelProps> = ({ onClose: _onClose }) => {
   const theme = useTheme();
   const { currentUser, artistProfile, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
@@ -113,7 +98,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
   const [showPrimaryColorPicker, setShowPrimaryColorPicker] = useState(false);
   const [showSecondaryColorPicker, setShowSecondaryColorPicker] = useState(false);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
 
@@ -505,7 +490,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
                         </Typography>
                         <Slider
                           value={localSettings.fontSize}
-                          onChange={(_, value) => handleSettingChange('fontSize', value)}
+                          onChange={(_, value) => handleSettingChange('fontSize', typeof value === 'number' ? value : value[0])}
                           min={10}
                           max={20}
                           step={1}
@@ -531,7 +516,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
                         </Typography>
                         <Slider
                           value={localSettings.borderRadius}
-                          onChange={(_, value) => handleSettingChange('borderRadius', value)}
+                          onChange={(_, value) => handleSettingChange('borderRadius', typeof value === 'number' ? value : value[0])}
                           min={0}
                           max={16}
                           step={1}
@@ -546,7 +531,7 @@ const SettingsPanel: FC<SettingsPanelProps> = ({ onClose }) => {
                         </Typography>
                         <Slider
                           value={localSettings.spacing}
-                          onChange={(_, value) => handleSettingChange('spacing', value)}
+                          onChange={(_, value) => handleSettingChange('spacing', typeof value === 'number' ? value : value[0])}
                           min={4}
                           max={16}
                           step={1}

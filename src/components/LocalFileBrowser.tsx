@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Button, Typography, List, ListItem, ListItemText, IconButton, Dialog, DialogTitle, DialogContent } from '@mui/material';
+import { Box, Button, List, ListItem, ListItemText, IconButton, Dialog, DialogTitle, DialogContent } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 
 interface LocalFileBrowserProps {

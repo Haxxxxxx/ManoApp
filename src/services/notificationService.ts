@@ -4,7 +4,7 @@
  * Service for handling notifications, particularly for @mentions in comments
  */
 
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 export interface Notification {
@@ -66,5 +66,39 @@ export const createMentionNotifications = async (
   } catch (error) {
     console.error('Failed to create mention notifications:', error);
   }
+};
+
+/**
+ * Mark a single notification as read
+ */
+export const markNotificationRead = async (notificationId: string): Promise<void> => {
+  const ref = doc(db, 'notifications', notificationId);
+  await updateDoc(ref, { read: true });
+};
+
+/**
+ * Mark all notifications as read for a user
+ */
+export const markAllNotificationsRead = async (userId: string): Promise<void> => {
+  const q = query(
+    collection(db, 'notifications'),
+    where('userId', '==', userId),
+    where('read', '==', false)
+  );
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return;
+
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((d) => {
+    batch.update(d.ref, { read: true });
+  });
+  await batch.commit();
+};
+
+/**
+ * Delete a notification
+ */
+export const deleteNotification = async (notificationId: string): Promise<void> => {
+  await deleteDoc(doc(db, 'notifications', notificationId));
 };
 

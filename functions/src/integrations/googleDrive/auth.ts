@@ -268,28 +268,37 @@ export async function generateOAuthState(userId: string): Promise<string> {
  * Validate OAuth state
  */
 export async function validateOAuthState(userId: string, state: string): Promise<boolean> {
-  const states = await db
+  const statesQuery = await db
     .collection('oauthStates')
     .where('userId', '==', userId)
     .where('state', '==', state)
     .limit(1)
     .get();
 
-  if (states.empty) {
+  if (statesQuery.empty) {
     return false;
   }
 
-  const stateData = states.docs[0].data();
-  const expiresAt = new Date(stateData.expiresAt);
-  
-  if (expiresAt < new Date()) {
-    // Delete expired state
-    await db.collection('oauthStates').doc(states.docs[0].id).delete();
-    return false;
-  }
+  const stateDoc = statesQuery.docs[0];
 
-  // Delete used state
-  await db.collection('oauthStates').doc(states.docs[0].id).delete();
-  return true;
+  // Use transaction for atomic read-and-delete to prevent TOCTOU race
+  return db.runTransaction(async (transaction) => {
+    const freshDoc = await transaction.get(stateDoc.ref);
+    if (!freshDoc.exists) {
+      return false;
+    }
+
+    const stateData = freshDoc.data()!;
+    const expiresAt = new Date(stateData.expiresAt);
+
+    // Delete the state doc regardless (used or expired)
+    transaction.delete(stateDoc.ref);
+
+    if (expiresAt < new Date()) {
+      return false;
+    }
+
+    return true;
+  });
 }
 

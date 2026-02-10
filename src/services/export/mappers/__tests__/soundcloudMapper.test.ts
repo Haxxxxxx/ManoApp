@@ -6,8 +6,8 @@ import {
   mapReleaseManifestToSoundCloud,
   validateSoundCloudPayload,
 } from '../soundcloudMapper';
-import { ReleaseManifest } from '../../../types/export';
-import { Song } from '../../../types/song';
+import { ReleaseManifest } from '../../../../types/export';
+import { Song } from '../../../../types/song';
 
 describe('SoundCloud Mapper', () => {
   const createMockSong = (overrides?: Partial<Song>): Song => ({
@@ -216,7 +216,7 @@ describe('SoundCloud Mapper', () => {
         downloadable: false,
       };
 
-      const result = validateSoundCloudPayload(payload);
+      const result = validateSoundCloudPayload(payload as any);
 
       expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
@@ -227,7 +227,7 @@ describe('SoundCloud Mapper', () => {
         description: 'Test description',
       };
 
-      const result = validateSoundCloudPayload(payload);
+      const result = validateSoundCloudPayload(payload as any);
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('Title is required');
@@ -238,7 +238,7 @@ describe('SoundCloud Mapper', () => {
         title: 'a'.repeat(256),
       };
 
-      const result = validateSoundCloudPayload(payload);
+      const result = validateSoundCloudPayload(payload as any);
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('Title must be 255 characters or less');
@@ -250,7 +250,7 @@ describe('SoundCloud Mapper', () => {
         description: 'a'.repeat(5001),
       };
 
-      const result = validateSoundCloudPayload(payload);
+      const result = validateSoundCloudPayload(payload as any);
 
       expect(result.valid).toBe(false);
       expect(result.errors).toContain('Description must be 5000 characters or less');

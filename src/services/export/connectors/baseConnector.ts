@@ -127,7 +127,7 @@ export abstract class BaseConnector implements ProviderConnector {
    * Validate file size
    */
   protected validateFileSize(file: File | Blob | Buffer, maxSizeBytes: number): boolean {
-    const size = file instanceof Buffer ? file.length : file.size;
+    const size = Buffer.isBuffer(file) ? file.length : file.size;
     return size <= maxSizeBytes;
   }
 

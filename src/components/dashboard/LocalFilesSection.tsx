@@ -8,8 +8,6 @@ import {
   CardMedia,
   IconButton,
   Button,
-  Paper,
-  CircularProgress
 } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import AudioFileIcon from '@mui/icons-material/AudioFile';

@@ -1,39 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { 
-  Box, 
-  Typography, 
-  Grid, 
-  Paper, 
-  Button, 
-  Card, 
-  CardContent, 
-  CardMedia, 
-  IconButton, 
-  Divider, 
-  List, 
-  ListItem, 
-  ListItemText, 
-  ListItemAvatar, 
-  Avatar, 
-  Chip, 
-  CircularProgress,
+import {
+  Box,
+  Typography,
   useTheme,
-  alpha,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   SelectChangeEvent,
-  LinearProgress,
-  ListItemIcon,
-  ListItemButton,
-  Tooltip,
   Container
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
@@ -42,33 +12,31 @@ import type { Trip, TripStatus } from '../types/trip';
 import { useAuth } from '../contexts/AuthContext';
 import { useTrips } from '../contexts/TripContext';
 import { useToast } from '../hooks/useToast';
-import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '../hooks/useKeyboardShortcuts';
-import { createDevPlaceholderProject, isDevPlaceholder } from '../utils/devPlaceholder';
-import MusicNoteIcon from '@mui/icons-material/MusicNote';
-import AddIcon from '@mui/icons-material/Add';
-import FolderIcon from '@mui/icons-material/Folder';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import GroupAddIcon from '@mui/icons-material/GroupAdd';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import AlbumIcon from '@mui/icons-material/Album';
-import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
+import { createDevPlaceholderProject } from '../utils/devPlaceholder';
 import { uploadMusicFile } from '../services/storageService';
 import { removeFileExtension } from '../utils/formatters';
 import { STORAGE_KEYS, storageHelpers, getErrorMessage } from '../utils/storageHelpers';
 import { SPECIAL_PROJECT_IDS } from '../utils/constants';
 import type { Song } from '../types/song';
-import DeleteIcon from '@mui/icons-material/Delete';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import AudioFileIcon from '@mui/icons-material/AudioFile';
-import PersonIcon from '@mui/icons-material/Person';
 import EmptyProjectPanel from './panels/EmptyProjectPanel';
 import StatisticsCards from './dashboard/StatisticsCards';
 import QuickActions from './dashboard/QuickActions';
 import ProjectsSection from './dashboard/ProjectsSection';
 import DashboardDialogs from './dashboard/DashboardDialogs';
 import LocalFilesSection from './dashboard/LocalFilesSection';
+import ActivityFeed from './dashboard/ActivityFeed';
+import BulkActionsBar from './dashboard/BulkActionsBar';
+import QuickActionsMenu from './common/QuickActionsMenu';
+import type { QuickAction } from './common/QuickActionsMenu';
+import { isFeatureEnabled } from '../config/features';
+import { useContextMenu } from '../hooks/useContextMenu';
+import { useBulkSelection } from '../hooks/useBulkSelection';
+import { updateTrip as updateTripService } from '../services/firebaseService';
+import EditIcon_ctx from '@mui/icons-material/Edit';
+import ShareIcon from '@mui/icons-material/Share';
+import CloudDownloadIcon_ctx from '@mui/icons-material/CloudDownload';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 interface ActivityItem {
   id: string;
@@ -100,50 +68,39 @@ interface FileSystemHandle {
   name: string;
 }
 
-interface FileSystemFileHandle extends FileSystemHandle {
-  kind: 'file';
-  getFile(): Promise<File>;
-}
-
 interface FileSystemDirectoryHandle extends FileSystemHandle {
   kind: 'directory';
   values(): AsyncIterableIterator<FileSystemHandle>;
 }
 
-interface StatisticsCardsProps {
-  totalProjects: number;
-  totalSongs: number;
-  activeProjects: number;
-  totalCollaborators: number;
-}
-
-interface QuickActionsProps {
-  onUploadClick: () => void;
-  onPlaylistClick: () => void;
-  onAnalyticsClick: () => void;
-  uploading: boolean;
-  creating: boolean;
-  onCreateProject: () => void;
-}
-
-interface ProjectCardProps {
-  trip: Trip;
-  onTripClick: (tripId: string) => void;
-  onDeleteTrip: (trip: Trip) => void;
-}
-
-interface ProjectsSectionProps {
-  title: string;
-  trips: Trip[];
-  loading: boolean;
-  onTripClick: (tripId: string) => void;
-  onDeleteTrip: (trip: Trip) => void;
-  onCreateNew: () => void;
-}
-
 const DashboardView: React.FC = () => {
   const theme = useTheme();
-  const { trips, sharedTrips, loading, error: tripsError, addTrip, removeTrip, refreshTrips } = useTrips();
+  const { trips, sharedTrips, loading, addTrip, removeTrip, refreshTrips } = useTrips();
+
+  // Context menu for projects
+  const { contextMenuPosition, contextMenuTarget, handleContextMenu: handleProjectContextMenu, closeContextMenu } = useContextMenu<Trip>();
+
+  // Bulk selection for projects
+  const { selectedCount, toggle: toggleSelect, deselectAll, isSelected } = useBulkSelection();
+
+  const handleBulkStatusChange = useCallback(async (status: TripStatus) => {
+    const selected = [...trips, ...(sharedTrips || [])].filter((t) => isSelected(t.id));
+    await Promise.allSettled(
+      selected.map((t) => updateTripService(t.id, { status }))
+    );
+    deselectAll();
+    refreshTrips();
+  }, [trips, sharedTrips, isSelected, deselectAll, refreshTrips]);
+
+  const projectContextActions: QuickAction[] = contextMenuTarget
+    ? [
+        { label: 'Open Project', icon: <OpenInNewIcon fontSize="small" />, onClick: () => { navigate(`/trip/${contextMenuTarget.id}`); } },
+        { label: 'Edit Details', icon: <EditIcon_ctx fontSize="small" />, onClick: () => { navigate(`/trip/${contextMenuTarget.id}`); } },
+        { label: 'Share', icon: <ShareIcon fontSize="small" />, onClick: () => { navigate(`/trip/${contextMenuTarget.id}`); } },
+        { label: 'Export', icon: <CloudDownloadIcon_ctx fontSize="small" />, onClick: () => { navigate(`/trip/${contextMenuTarget.id}`); } },
+        { label: 'Delete', icon: <DeleteOutlineIcon fontSize="small" />, onClick: () => { handleDeleteTrip(contextMenuTarget); }, dividerBefore: true, color: 'error' },
+      ]
+    : [];
   
   // Add dev placeholder project in development mode
   const displayTrips = useMemo(() => {
@@ -154,7 +111,7 @@ const DashboardView: React.FC = () => {
     return allTrips;
   }, [trips]);
   const [localFiles, setLocalFiles] = useState<Song[]>([]);
-  const [localProjectId] = useState<string>(SPECIAL_PROJECT_IDS.LOCAL_SONGS);
+  const [_localProjectId] = useState<string>(SPECIAL_PROJECT_IDS.LOCAL_SONGS);
   const [creating, setCreating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -165,26 +122,25 @@ const DashboardView: React.FC = () => {
   const [playlistDescription, setPlaylistDescription] = useState('');
   const [playlistVisibility, setPlaylistVisibility] = useState<'private' | 'public' | 'unlisted'>('private');
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
-  const [selectedTripId, setSelectedTripId] = useState<string>('');
+  const [_selectedTripId, setSelectedTripId] = useState<string>('');
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const [_error, setError] = useState<string | null>(null);
+  const { currentUser: user } = useAuth();
   const navigate = useNavigate();
   const { showSuccess, showError, ToastComponent } = useToast();
-  const [showFolderDialog, setShowFolderDialog] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState<string>('');
+  const [_showFolderDialog, setShowFolderDialog] = useState(false);
   const [scanningFiles, setScanningFiles] = useState(false);
-  const [scannedFiles, setScannedFiles] = useState<File[]>([]);
-  const [scanProgress, setScanProgress] = useState(0);
+  const [_scannedFiles, setScannedFiles] = useState<File[]>([]);
+  const [_scanProgress, setScanProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [folderPath, setFolderPath] = useState('');
   const [showPathDialog, setShowPathDialog] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
 
   // State for song counts (fetched asynchronously)
-  const [songCounts, setSongCounts] = useState<Record<string, number>>({});
+  const [_songCounts, setSongCounts] = useState<Record<string, number>>({});
   const [totalSongsCount, setTotalSongsCount] = useState(0);
 
   // Fetch song counts for all trips
@@ -249,36 +205,6 @@ const DashboardView: React.FC = () => {
     navigate(`/trip/${trip.id}`);
   }, [navigate]);
 
-  const handleCreateProject = async (project: Omit<Trip, 'id'>) => {
-    if (!user) return;
-    
-    try {
-      setCreating(true);
-      const newTrip = await createTrip({
-        name: project.name,
-        description: project.description || '',
-        userId: user.uid,
-        songs: [], // Songs are stored in songs collection, not in trip.songs
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        collaborators: [],
-        tags: project.tags || [],
-        status: 'draft',
-        type: 'project',
-        isPrivate: true
-      });
-      
-      setOpenDialog(false);
-      
-      // Navigate to the new project
-      navigate(`/trip/${newTrip.id}`);
-    } catch (error) {
-      setError(getErrorMessage(error, 'Failed to create project. Please try again.'));
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const handleUploadClick = () => {
     setShowUploadDialog(true);
   };
@@ -291,7 +217,7 @@ const DashboardView: React.FC = () => {
     setShowAnalyticsDialog(true);
     try {
       const data = await getAnalytics(user?.uid || '');
-      setAnalyticsData(data);
+      setAnalyticsData(data as AnalyticsData);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to fetch analytics'));
       setError('Failed to load analytics data');
@@ -493,11 +419,6 @@ const DashboardView: React.FC = () => {
     setTripToDelete(null);
   };
 
-  const handleLocalFileCardClick = () => {
-    // Navigate to the local songs project
-    navigate(`/trip/${localProjectId}`);
-  };
-
   const handlePathSubmit = async () => {
     if (!folderPath.trim()) {
       setError('Please enter a valid folder path');
@@ -513,8 +434,7 @@ const DashboardView: React.FC = () => {
       // to scan the folder at the given path
       // For now, we'll simulate the scanning process
       const audioFiles: File[] = [];
-      const audioExtensions = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'];
-      
+
       // Create a new trip with the scanned files
       const newTrip: Trip = {
         id: `local-${Date.now()}`,
@@ -607,7 +527,6 @@ const DashboardView: React.FC = () => {
     );
 
     if (audioFiles.length > 0) {
-      const folderName = files[0].webkitRelativePath.split('/')[0];
       createLocalTrip(audioFiles);
     }
 
@@ -765,6 +684,9 @@ const DashboardView: React.FC = () => {
           onTripClick={(trip: Trip) => handleTripClick(trip)}
           onDeleteTrip={handleDeleteTrip}
           onCreateNew={() => setOpenDialog(true)}
+          onContextMenu={handleProjectContextMenu}
+          isSelected={isSelected}
+          onToggleSelect={toggleSelect}
         />
               </Box>
 
@@ -777,9 +699,21 @@ const DashboardView: React.FC = () => {
             onTripClick={(trip: Trip) => handleTripClick(trip)}
             onDeleteTrip={handleDeleteTrip}
             onCreateNew={() => setOpenDialog(true)}
+            onContextMenu={handleProjectContextMenu}
+            isSelected={isSelected}
+            onToggleSelect={toggleSelect}
           />
             </Box>
           )}
+
+      {isFeatureEnabled('activityFeed') && (trips.length > 0 || (sharedTrips && sharedTrips.length > 0)) && (
+        <Box sx={{ mt: 4 }}>
+          <ActivityFeed
+            tripIds={[...trips, ...(sharedTrips || [])].map((t) => t.id)}
+            maxItems={10}
+          />
+        </Box>
+      )}
 
       <LocalFilesSection
         localFiles={localFiles}
@@ -838,7 +772,7 @@ const DashboardView: React.FC = () => {
         <EmptyProjectPanel
           tripId="new"
           onClose={() => setOpenDialog(false)}
-          onProjectCreated={(project) => {
+          onProjectCreated={(_project) => {
             // EmptyProjectPanel already creates the project and navigates
             // We just need to refresh the trips list and close the dialog
             refreshTrips();
@@ -846,6 +780,24 @@ const DashboardView: React.FC = () => {
           }}
           isDialog={true}
           mode="project"
+        />
+      )}
+
+      {/* Quick Actions Context Menu */}
+      {isFeatureEnabled('quickActions') && (
+        <QuickActionsMenu
+          anchorPosition={contextMenuPosition}
+          onClose={closeContextMenu}
+          actions={projectContextActions}
+        />
+      )}
+
+      {/* Bulk Status Bar */}
+      {isFeatureEnabled('batchOperations') && (
+        <BulkActionsBar
+          selectedCount={selectedCount}
+          onStatusChange={handleBulkStatusChange}
+          onDeselectAll={deselectAll}
         />
       )}
     </Container>

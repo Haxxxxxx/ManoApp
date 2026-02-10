@@ -34,7 +34,11 @@ function getEncryptionKey(): Buffer {
     }
   }
   
-  return crypto.pbkdf2Sync(encryptionKey, 'manoapp-salt', ITERATIONS, KEY_LENGTH, 'sha256');
+  const salt = process.env.ENCRYPTION_SALT || 'manoapp-salt';
+  if (!process.env.ENCRYPTION_SALT) {
+    console.warn('ENCRYPTION_SALT not set, using default salt. Set ENCRYPTION_SALT in production.');
+  }
+  return crypto.pbkdf2Sync(encryptionKey, salt, ITERATIONS, KEY_LENGTH, 'sha256');
 }
 
 /**

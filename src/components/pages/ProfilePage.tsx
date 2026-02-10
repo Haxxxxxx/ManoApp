@@ -12,17 +12,14 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
-  useTheme,
-  alpha,
   SvgIconProps
 } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { ArtistProfile } from '../../types/artist';
-import { getUserProfile, updateUserProfile } from '../../services/firebaseService';
+import { getUserProfile } from '../../services/firebaseService';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import WorkIcon from '@mui/icons-material/Work';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import LanguageIcon from '@mui/icons-material/Language';
 import InstagramIcon from '@mui/icons-material/Instagram';
@@ -45,7 +42,6 @@ const platformIcons: { [key: string]: React.ComponentType<SvgIconProps> } = {
 };
 
 const ProfilePage: React.FC = () => {
-  const theme = useTheme();
   const { currentUser, updateProfile } = useAuth();
   const [profile, setProfile] = useState<ArtistProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);

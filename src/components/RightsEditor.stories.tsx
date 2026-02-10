@@ -4,7 +4,6 @@
 
 import type { Meta, StoryObj } from '@storybook/react';
 import RightsEditor from './RightsEditor';
-import { RightsSplit } from '../types/export';
 
 const meta: Meta<typeof RightsEditor> = {
   title: 'Components/RightsEditor',

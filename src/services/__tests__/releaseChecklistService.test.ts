@@ -6,11 +6,9 @@ import {
   generateChecklist,
   calculateChecklistProgress,
   getChecklistItemsByStatus,
-  getChecklistItemsByCategory,
   getRequiredChecklistItems,
-  getOverdueChecklistItems,
 } from '../releaseChecklistService';
-import { ChecklistItem, ReleaseType } from '../../types/release';
+import { ChecklistItem } from '../../types/release';
 
 describe('releaseChecklistService', () => {
   describe('generateChecklist', () => {

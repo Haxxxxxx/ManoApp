@@ -11,20 +11,16 @@ import {
   Alert,
   Dialog,
   DialogContent,
-  IconButton,
   InputAdornment,
   Tooltip,
   Autocomplete,
   Stack,
   useTheme,
   alpha,
-  DialogTitle,
   DialogActions
 } from '@mui/material';
-import { 
-  Add as AddIcon, 
-  Delete as DeleteIcon, 
-  MusicNote as MusicNoteIcon, 
+import {
+  Add as AddIcon,
   Info as InfoIcon,
   CloudUpload as CloudUploadIcon
 } from '@mui/icons-material';
@@ -43,7 +39,6 @@ import { validateTitle, validateArtist } from '../../utils/validation';
 import { isFeatureEnabled } from '../../config/features';
 import { httpsCallable, Functions } from 'firebase/functions';
 import { functions } from '../../firebase/config';
-import { aiService } from '../../services/aiService';
 import AIMetadataSuggestions from './AIMetadataSuggestions';
 import { AIMetadata, ApplyAISuggestionsOptions } from '../../types/ai';
 import { updateSong } from '../../services/firebaseService';
@@ -72,9 +67,7 @@ const AddSongPanel: React.FC<AddSongPanelProps> = ({
   const [success, setSuccess] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
-  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [titleError, setTitleError] = useState<string>('');
   const [artistError, setArtistError] = useState<string>('');
   const [aiMetadata, setAiMetadata] = useState<AIMetadata | null>(null);

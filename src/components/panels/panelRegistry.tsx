@@ -29,7 +29,13 @@ import CommentsPanel from './CommentsPanel';
 import ReleasePlanningPanel from './ReleasePlanningPanel';
 import GoogleDriveImportPanel from './GoogleDriveImportPanel';
 import ReleaseExportPanel from './ReleaseExportPanel';
-import type { Trip } from '../../types/trip';
+import BatchUploadPanel from './BatchUploadPanel';
+import BatchMetadataPanel from './BatchMetadataPanel';
+import AutoTagPanel from './AutoTagPanel';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import EditNoteIcon from '@mui/icons-material/EditNote';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import type { Trip, TripStatus } from '../../types/trip';
 import type { Song } from '../../types/song';
 import type { Release } from '../../types/release';
 
@@ -37,30 +43,28 @@ import type { Release } from '../../types/release';
 export interface PanelProps {
   onClose: () => void;
   tripId?: string;
-  trip?: Trip;
+  trip?: Trip | null;
   songs?: Song[];
   onSongsUpdated?: (songs: Song[]) => void;
-  // Additional optional props for specific panels
-  onStatusChange?: (newStatus: any) => void;
+  onStatusChange?: (newStatus: TripStatus) => void;
   onCreateAlbum?: () => void;
   onExport?: () => void;
   onShare?: () => void;
   onEdit?: () => void;
   setActivePanel?: (panel: string) => void;
   platform?: 'spotify' | 'soundcloud';
-  // New feature panel props
   projectId?: string;
   assetId?: string;
   collaborators?: Array<{ id: string; name: string; email?: string; avatar?: string }>;
   song?: Song;
-  onCreateRelease?: (release: any) => Promise<void>;
+  onCreateRelease?: (release: Omit<Release, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onUpdateRelease?: (releaseId: string, updates: Partial<Release>) => Promise<void>;
   existingRelease?: Release;
   release?: Release;
   onExportMixdown?: (blob: Blob, filename: string) => void;
   onFileImported?: (assetId: string) => void;
   onExportComplete?: () => void;
-  setActivePanel?: (panel: string) => void;
-  [key: string]: any; // Allow additional props for flexibility
+  [key: string]: unknown;
 }
 
 export type PanelRegistry = {
@@ -75,113 +79,131 @@ export type PanelRegistry = {
 // Create a panel registry
 export const panelRegistry: PanelRegistry = {
   'export': {
-    component: ExportSettingsPanel,
+    component: ExportSettingsPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Export Settings',
     icon: <CloudDownloadIcon />,
     requiresTrip: false
   },
   'metadata': {
-    component: MetadataEditorPanel,
+    component: MetadataEditorPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Metadata Editor',
     icon: <EditIcon />,
     requiresTrip: true
   },
   'collaborators': {
-    component: CollaboratorsPanel,
+    component: CollaboratorsPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Collaborators',
     icon: <GroupAddIcon />,
     requiresTrip: true
   },
   'analytics': {
-    component: ProjectAnalyticsPanel,
+    component: ProjectAnalyticsPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Project Analytics',
     icon: <BarChartIcon />,
     requiresTrip: false
   },
   'tags': {
-    component: TagsAndCategoriesPanel,
+    component: TagsAndCategoriesPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Tags & Categories',
     icon: <TagIcon />,
     requiresTrip: true
   },
   'settings': {
-    component: ProjectSettingsPanel,
+    component: ProjectSettingsPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Project Settings',
     icon: <SettingsIcon />,
     requiresTrip: true
   },
   'publish-spotify': {
-    component: PublishingPanel,
+    component: PublishingPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Publish to Spotify',
     icon: <CloudUploadIcon />,
     requiresTrip: true
   },
   'publish-soundcloud': {
-    component: PublishingPanel,
+    component: PublishingPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Publish to SoundCloud',
     icon: <CloudUploadIcon />,
     requiresTrip: true
   },
   'song-management': {
-    component: SongManagementPanel,
+    component: SongManagementPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Song Management',
     icon: <MusicNoteIcon />,
     requiresTrip: true
   },
   'create-project': {
-    component: ProjectSettingsPanel,
+    component: ProjectSettingsPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Create New Project',
     icon: <AddIcon />,
     requiresTrip: false
   },
   'upload': {
-    component: SongManagementPanel,
+    component: SongManagementPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Upload Song',
     icon: <CloudUploadIcon />,
     requiresTrip: false
   },
   'create-playlist': {
-    component: SongManagementPanel,
+    component: SongManagementPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Create Playlist',
     icon: <PlaylistAddIcon />,
     requiresTrip: false
   },
   'overview': {
-    component: ProjectOverviewPanel,
+    component: ProjectOverviewPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Project Overview',
     icon: <DashboardIcon />,
     requiresTrip: true
   },
   'mixer': {
-    component: MixerPanel,
+    component: MixerPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Audio Mixer',
     icon: <GraphicEqIcon />,
     requiresTrip: false
   },
   'comments': {
-    component: CommentsPanel,
+    component: CommentsPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Comments',
     icon: <CommentIcon />,
     requiresTrip: true
   },
   'release-planning': {
-    component: ReleasePlanningPanel,
+    component: ReleasePlanningPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Release Planning',
     icon: <ChecklistIcon />,
     requiresTrip: true
   },
   'gdrive-import': {
-    component: GoogleDriveImportPanel,
+    component: GoogleDriveImportPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Import from Google Drive',
     icon: <CloudUploadIcon />,
     requiresTrip: false
   },
   'release-export': {
-    component: ReleaseExportPanel,
+    component: ReleaseExportPanel as unknown as React.ComponentType<PanelProps>,
     title: 'Export Release',
     icon: <CloudUploadIcon />,
     requiresTrip: true
-  }
+  },
+  'batch-upload': {
+    component: BatchUploadPanel as unknown as React.ComponentType<PanelProps>,
+    title: 'Batch Upload',
+    icon: <UploadFileIcon />,
+    requiresTrip: true
+  },
+  'batch-metadata': {
+    component: BatchMetadataPanel as unknown as React.ComponentType<PanelProps>,
+    title: 'Batch Metadata Editor',
+    icon: <EditNoteIcon />,
+    requiresTrip: true
+  },
+  'auto-tag': {
+    component: AutoTagPanel as unknown as React.ComponentType<PanelProps>,
+    title: 'AI Tag Suggestions',
+    icon: <AutoAwesomeIcon />,
+    requiresTrip: true
+  },
 };
 
 // Helper function to get panel props based on panel type
@@ -218,7 +240,7 @@ export const getPanelProps = (
   }
   
   if (panelType === 'song-management') {
-    panelProps.onSongsUpdated = (updatedSongs: Song[]) => {
+    panelProps.onSongsUpdated = (_updatedSongs: Song[]) => {
       // This will be handled by the parent component
       // Songs updated
     };

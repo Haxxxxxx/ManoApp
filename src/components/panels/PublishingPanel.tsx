@@ -1,4 +1,4 @@
-import { Box, Typography, Paper, Button, Stepper, Step, StepLabel, TextField, FormControlLabel, Checkbox, CircularProgress, Alert, Divider, Chip, Stack, Dialog, DialogTitle, DialogContent, DialogActions, RadioGroup, Radio, FormControl, FormLabel } from '@mui/material';
+import { Box, Typography, Paper, Button, Stepper, Step, StepLabel, TextField, FormControlLabel, Checkbox, CircularProgress, Alert, Divider, Dialog, DialogTitle, DialogContent, RadioGroup, Radio, FormControl, FormLabel } from '@mui/material';
 import { useState } from 'react';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
@@ -8,12 +8,14 @@ import { exportForSoundCloud, exportMixtapeForSoundCloud, exportAlbum } from '..
 import { publishToSoundCloud } from '../../services/soundcloudService';
 import { getErrorMessage } from '../../utils/storageHelpers';
 import { publishToSpotify } from '../../services/spotifyService';
+import { parseDurationToSeconds } from '../../utils/formatters';
 import LocalFileBrowser from '../LocalFileBrowser';
-import { LocalFile, convertLocalFileToSong } from '../../services/localFileService';
+import { LocalFile } from '../../services/localFileService';
 import AlbumIcon from '@mui/icons-material/Album';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import type { AlbumSong } from '../../types/album';
 import { useAuth } from '../../contexts/AuthContext';
+import { functions } from '../../firebase/config';
 
 interface PublishingPanelProps {
   trip: Trip;
@@ -42,14 +44,7 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
     selectedPlatforms: [platform],
   });
 
-  // Mixtape export fields
-  const [mixtapeTitle, setMixtapeTitle] = useState('');
-  const [mixtapeDescription, setMixtapeDescription] = useState('');
-  const [mixtapeTags, setMixtapeTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState('');
-
   const [showLocalFileBrowser, setShowLocalFileBrowser] = useState(false);
-  const [localSongs, setLocalSongs] = useState<Song[]>([]);
 
   const steps = platform === 'soundcloud' 
     ? ['Select Content', 'Basic Information', 'SoundCloud Settings', 'Export & Publish']
@@ -198,80 +193,8 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
     }
   };
 
-  const handleAddTag = () => {
-    if (newTag.trim() && !mixtapeTags.includes(newTag.trim())) {
-      setMixtapeTags([...mixtapeTags, newTag.trim()]);
-      setNewTag('');
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setMixtapeTags(mixtapeTags.filter(tag => tag !== tagToRemove));
-  };
-
-  const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      handleAddTag();
-    }
-  };
-
-  const handleLocalFilesSelected = (files: LocalFile[]) => {
-    const newSongs = files.map(convertLocalFileToSong);
-    setLocalSongs(prev => [...prev, ...newSongs]);
+  const handleLocalFilesSelected = (_files: File[]) => {
     setShowLocalFileBrowser(false);
-  };
-
-  const handleExportSingle = async () => {
-    if (publishingData.selectedSongs.length !== 1) {
-      setError('Please select exactly one song to export');
-      return;
-    }
-
-    setExporting(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await exportForSoundCloud(songs.find(song => song.id === publishingData.selectedSongs[0])!);
-      setSuccess('Song exported successfully!');
-      handleNext();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to export song'));
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportMixtape = async () => {
-    if (publishingData.selectedSongs.length === 0) {
-      setError('Please select at least one song to export');
-      return;
-    }
-
-    if (!mixtapeTitle.trim()) {
-      setError('Please enter a mixtape title');
-      return;
-    }
-
-    setExporting(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await exportMixtapeForSoundCloud(
-        songs.filter(song => publishingData.selectedSongs.includes(song.id)),
-        mixtapeTitle,
-        mixtapeDescription,
-        mixtapeTags
-      );
-      setSuccess('Mixtape exported successfully!');
-      handleNext();
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to export mixtape'));
-    } finally {
-      setExporting(false);
-    }
   };
 
   const renderStepContent = (step: number) => {
@@ -503,21 +426,23 @@ const PublishingPanel = ({ trip, songs, platform, onClose }: PublishingPanelProp
           {activeStep === steps.length - 1 ? (
             <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
-                variant="outlined"
+                variant="contained"
                 startIcon={exporting ? <CircularProgress size={20} /> : <CloudDownloadIcon />}
                 onClick={handleExport}
                 disabled={exporting || publishing}
               >
-                {exporting ? 'Exporting...' : 'Export'}
+                {exporting ? 'Exporting...' : 'Export as ZIP'}
               </Button>
-              <Button
-                variant="contained"
-                startIcon={publishing ? <CircularProgress size={20} /> : <CloudUploadIcon />}
-                onClick={handlePublish}
-                disabled={publishing || exporting}
-              >
-                {publishing ? 'Publishing...' : 'Publish'}
-              </Button>
+              {functions && (
+                <Button
+                  variant="outlined"
+                  startIcon={publishing ? <CircularProgress size={20} /> : <CloudUploadIcon />}
+                  onClick={handlePublish}
+                  disabled={publishing || exporting}
+                >
+                  {publishing ? 'Publishing...' : 'Publish'}
+                </Button>
+              )}
             </Box>
           ) : (
             <Button

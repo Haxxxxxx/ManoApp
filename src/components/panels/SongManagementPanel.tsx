@@ -6,13 +6,9 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
   IconButton,
   TextField,
   Button,
-  Checkbox,
-  FormControlLabel,
-  Divider,
   Grid,
   Chip,
   Dialog,
@@ -21,25 +17,27 @@ import {
   DialogActions,
   Alert,
   CircularProgress,
-  Tooltip,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
-  InputAdornment
 } from '@mui/material';
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import { Song } from '../../types';
+import type { SongStatus } from '../../types/song';
+import SongStatusBadge from '../common/SongStatusBadge';
+import MetadataCompletenessIndicator from '../common/MetadataCompletenessIndicator';
+import { isFeatureEnabled } from '../../config/features';
 import { updateSong, deleteSong } from '../../services/firebaseService';
 import { exportMixtapeForSoundCloud } from '../../services/exportService';
 import { getErrorMessage } from '../../utils/storageHelpers';
+import { useSongReorder } from '../../hooks/useSongReorder';
 
 interface SongManagementPanelProps {
   songs: Song[];
@@ -51,14 +49,14 @@ interface SongManagementPanelProps {
 const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
   songs,
   tripId,
-  onClose,
+  onClose: _onClose,
   onSongsUpdated
 }) => {
   const [editableSongs, setEditableSongs] = useState<Song[]>([]);
   const [editingSongId, setEditingSongId] = useState<string | null>(null);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedArtist, setEditedArtist] = useState('');
-  const [selectedSongs, setSelectedSongs] = useState<string[]>([]);
+  const [selectedSongs, _setSelectedSongs] = useState<string[]>([]);
   const [mixtapeTitle, setMixtapeTitle] = useState('');
   const [mixtapeDescription, setMixtapeDescription] = useState('');
   const [mixtapeTags, setMixtapeTags] = useState<string[]>([]);
@@ -78,17 +76,15 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
     setEditableSongs([...songs]);
   }, [songs]);
 
-  // Handle song reordering
-  const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const items = Array.from(editableSongs);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    setEditableSongs(items);
-    onSongsUpdated(items);
-  };
+  // Handle song reordering with Firestore persistence
+  const { handleDragEnd, isSaving: _isSavingOrder } = useSongReorder(
+    editableSongs,
+    (reordered) => {
+      setEditableSongs(reordered);
+      onSongsUpdated(reordered);
+    },
+    tripId
+  );
 
   // Start editing a song
   const handleEditStart = (song: Song) => {
@@ -131,15 +127,6 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
     } catch (error) {
       // Error updating song
     }
-  };
-
-  // Toggle song selection
-  const handleToggleSelect = (songId: string) => {
-    setSelectedSongs(prev => 
-      prev.includes(songId) 
-        ? prev.filter(id => id !== songId) 
-        : [...prev, songId]
-    );
   };
 
   // Add a new tag
@@ -337,6 +324,25 @@ const SongManagementPanel: React.FC<SongManagementPanelProps> = ({
                                 secondary={song.artist}
                                 sx={{ flex: 1 }}
                               />
+                              <SongStatusBadge
+                                status={(song.status as SongStatus) || 'draft'}
+                                onChange={async (newStatus) => {
+                                  try {
+                                    await updateSong(song.id, { status: newStatus });
+                                    const updatedSongs = editableSongs.map(s =>
+                                      s.id === song.id ? { ...s, status: newStatus } : s
+                                    );
+                                    setEditableSongs(updatedSongs);
+                                    onSongsUpdated(updatedSongs);
+                                  } catch {
+                                    // status update failed silently
+                                  }
+                                }}
+                                size="small"
+                              />
+                              {isFeatureEnabled('metadataCompleteness') && (
+                                <MetadataCompletenessIndicator song={song} compact />
+                              )}
                               <Box sx={{ display: 'flex' }}>
                                 <IconButton 
                                   onClick={() => handleEditStart(song)}

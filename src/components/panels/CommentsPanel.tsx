@@ -8,12 +8,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
-  Paper,
   Tabs,
   Tab,
   CircularProgress,
   Alert,
-  useTheme,
 } from '@mui/material';
 import { Comment } from '../../types/comment';
 import CommentThread from '../common/CommentThread';
@@ -42,9 +40,8 @@ const CommentsPanel: React.FC<CommentsPanelProps> = ({
   projectId,
   assetId,
   collaborators,
-  onClose,
+  onClose: _onClose,
 }) => {
-  const theme = useTheme();
   const { currentUser } = useAuth();
   const { showSuccess, showError, ToastComponent } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);

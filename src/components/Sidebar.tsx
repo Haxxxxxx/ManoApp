@@ -1,27 +1,19 @@
-import { 
-  Box, 
-  List, 
-  ListItem, 
-  ListItemButton, 
-  ListItemText, 
-  IconButton, 
-  Divider, 
-  Button, 
-  Dialog, 
-  DialogTitle, 
-  DialogContent, 
-  DialogActions, 
-  TextField, 
+import {
+  Box,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  IconButton,
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
   CircularProgress,
   Typography,
-  Avatar,
-  Badge,
-  Tooltip,
-  Fade,
   useTheme,
   alpha,
   ListItemIcon,
-  Chip,
   Paper,
   Collapse,
   Drawer,
@@ -29,15 +21,11 @@ import {
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import AddIcon from '@mui/icons-material/Add';
-import { Trip } from '../types/trip';
-import { Song } from '../types/song';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getErrorMessage } from '../utils/storageHelpers';
 import { useTrips } from '../contexts/TripContext';
-import { createTrip } from '../services/firebaseService';
+import type { Trip } from '../types/trip';
 import { useNavigate, useLocation } from 'react-router-dom';
-import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import FolderIcon from '@mui/icons-material/Folder';
 import PersonIcon from '@mui/icons-material/Person';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -50,6 +38,11 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import MenuIcon from '@mui/icons-material/Menu';
 import AlbumIcon from '@mui/icons-material/Album';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import { checkIsAdmin } from '../services/userRoleService';
+import { isFeatureEnabled } from '../config/features';
+import NotificationCenter from './common/NotificationCenter';
 
 interface SidebarProps {
   selectedTrip: string | null;
@@ -59,7 +52,7 @@ interface SidebarProps {
 const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
-  const { currentUser, artistProfile } = useAuth();
+  const { currentUser } = useAuth();
   const { trips, sharedTrips, loading, addTrip } = useTrips();
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,32 +61,26 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tripsExpanded, setTripsExpanded] = useState(true);
   const [sharedTripsExpanded, setSharedTripsExpanded] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  const handleCreateTrip = async (song: Song) => {
+  useEffect(() => {
+    if (currentUser) {
+      checkIsAdmin(currentUser.uid).then(setIsAdmin);
+    }
+  }, [currentUser]);
+
+  const handleCreateTrip = async (project: Trip) => {
     if (!currentUser) return;
-    
+
     try {
-      const newTrip = await createTrip({
-        name: song.title,
-        description: song.metadata?.lyrics || '',
-        userId: currentUser.uid,
-        songs: [song],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        collaborators: [],
-        tags: song.metadata?.tags || [],
-        status: 'draft',
-        type: 'project'
-      });
-      
       // Add the trip to the context
-      addTrip(newTrip);
-      
+      addTrip(project);
+
       setOpenDialog(false);
-      
+
       // Select the newly created trip
-      onSelectTrip(newTrip.id);
-      navigate(`/trip/${newTrip.id}`);
+      onSelectTrip(project.id);
+      navigate(`/trip/${project.id}`);
     } catch (error) {
       // Error creating trip
     }
@@ -174,11 +161,14 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
         >
           ManoApp
         </Typography>
-        {isMobile && (
-          <IconButton onClick={handleDrawerToggle}>
-            <MenuIcon />
-          </IconButton>
-        )}
+        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
+          {isFeatureEnabled('notificationCenter') && <NotificationCenter />}
+          {isMobile && (
+            <IconButton onClick={handleDrawerToggle}>
+              <MenuIcon />
+            </IconButton>
+          )}
+        </Box>
       </Box>
       
       <Divider />
@@ -197,7 +187,7 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
         </ListItem>
         
         <ListItem disablePadding>
-          <ListItemButton 
+          <ListItemButton
             selected={location.pathname === '/albums'}
             onClick={() => navigate('/albums')}
           >
@@ -207,9 +197,21 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
             <ListItemText primary="Albums" />
           </ListItemButton>
         </ListItem>
-        
+
         <ListItem disablePadding>
-          <ListItemButton 
+          <ListItemButton
+            selected={location.pathname === '/analytics'}
+            onClick={() => navigate('/analytics')}
+          >
+            <ListItemIcon>
+              <BarChartIcon />
+            </ListItemIcon>
+            <ListItemText primary="Analytics" />
+          </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding>
+          <ListItemButton
             selected={location.pathname === '/profile'}
             onClick={() => navigate('/profile')}
           >
@@ -219,6 +221,20 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
             <ListItemText primary="Profile" />
           </ListItemButton>
         </ListItem>
+
+        {isAdmin && (
+          <ListItem disablePadding>
+            <ListItemButton 
+              selected={location.pathname === '/admin'}
+              onClick={() => navigate('/admin')}
+            >
+              <ListItemIcon>
+                <AdminPanelSettingsIcon />
+              </ListItemIcon>
+              <ListItemText primary="Admin" />
+            </ListItemButton>
+          </ListItem>
+        )}
         
         <ListItem disablePadding>
           <ListItemButton onClick={() => setOpenSettings(true)}>

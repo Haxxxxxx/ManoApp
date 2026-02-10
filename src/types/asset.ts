@@ -28,6 +28,9 @@ export interface Asset {
   /** SHA256 hash for deduplication */
   hash: string;
   
+  /** Audio fingerprint for duplicate detection (Chromaprint) */
+  fingerprint?: string;
+  
   /** Source of the asset */
   source: AssetSource;
   

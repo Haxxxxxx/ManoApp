@@ -94,6 +94,14 @@ export interface Release {
   /** Target platforms */
   platforms?: string[];
   
+  /** Rights splits for collaborators */
+  rightsSplits?: Array<{
+    userId: string;
+    name: string;
+    percentage: number;
+    role?: string;
+  }>;
+  
   /** Overall progress (0-100) */
   progress: number;
   

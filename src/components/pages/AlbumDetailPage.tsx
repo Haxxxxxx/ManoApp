@@ -6,8 +6,7 @@ import {
   Grid, 
   Button, 
   IconButton, 
-  Divider, 
-  List, 
+  List,
   ListItem, 
   ListItemText, 
   ListItemIcon, 
@@ -25,10 +24,7 @@ import {
 import { 
   Edit as EditIcon, 
   Delete as DeleteIcon, 
-  Album as AlbumIcon,
-  MusicNote as MusicNoteIcon,
   CalendarToday as CalendarIcon,
-  Person as PersonIcon,
   PlayArrow as PlayIcon,
   Pause as PauseIcon,
   SkipNext as SkipNextIcon,
@@ -98,7 +94,7 @@ const AlbumDetailPage = () => {
             setAlbum(albumData);
           }
         }
-      } catch (err) {
+      } catch (_err) {
         if (!cancelled) {
           // Error fetching album
           setError('Failed to load album. Please try again.');
@@ -142,7 +138,7 @@ const AlbumDetailPage = () => {
       }
     };
 
-    const handleError = (e: ErrorEvent) => {
+    const handleError = (_e: ErrorEvent) => {
       // Error playing audio
       setError('Failed to play the audio file. Please check if the file exists.');
     };
@@ -164,7 +160,7 @@ const AlbumDetailPage = () => {
     if (!audioRef.current) return;
 
     if (isPlaying) {
-      audioRef.current.play().catch(err => {
+      audioRef.current.play().catch(_err => {
         // Error playing audio
         setError('Failed to play the audio file. Please check if the file exists.');
         setIsPlaying(false);

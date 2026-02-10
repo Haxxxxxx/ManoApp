@@ -8,5 +8,7 @@ export interface ActivityItem {
   timestamp: string | Date;
   details?: Record<string, unknown>;
   type?: 'create' | 'update' | 'delete' | 'collaborate' | 'upload' | 'export';
+  tripId?: string;
+  tripName?: string;
 }
 

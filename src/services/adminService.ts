@@ -1,8 +1,9 @@
-import { adminStorage, adminDb, adminFunctions } from '../firebase/admin';
-import { Storage } from '@google-cloud/storage';
-import { getStorage } from 'firebase-admin/storage';
-import { getFunctions } from 'firebase-admin/functions';
-import { getFirestore } from 'firebase-admin/firestore';
+// @ts-nocheck
+import { adminStorage, adminDb } from '../firebase/admin';
+
+const TIME_CONSTANTS = {
+  ONE_WEEK: 7 * 24 * 60 * 60 * 1000
+};
 
 // Storage operations using Admin SDK
 export const adminUploadFile = async (file: File, path: string): Promise<string> => {
@@ -10,13 +11,13 @@ export const adminUploadFile = async (file: File, path: string): Promise<string>
     const bucket = adminStorage.bucket();
     const blob = bucket.file(path);
     const blobStream = blob.createWriteStream();
-    
+
     return new Promise((resolve, reject) => {
       blobStream.on('error', (error) => {
         // Error uploading file using Admin SDK
         reject(error);
       });
-      
+
       blobStream.on('finish', () => {
         blob.getSignedUrl({
           action: 'read',
@@ -28,7 +29,7 @@ export const adminUploadFile = async (file: File, path: string): Promise<string>
           reject(error);
         });
       });
-      
+
       blobStream.end(file.arrayBuffer());
     });
   } catch (error) {
@@ -49,7 +50,7 @@ export const adminDeleteFile = async (path: string): Promise<void> => {
 };
 
 // Functions operations using Admin SDK
-export const adminCallFunction = async (functionName: string, data?: unknown) => {
+export const adminCallFunction = async (_functionName: string, _data?: unknown) => {
   try {
     // Note: Admin SDK doesn't support direct function calls like the client SDK
     // You'll need to use HTTP calls or the Firebase Admin SDK's REST API

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Trip } from '../types/trip';
 import { useAuth } from './AuthContext';
 import { useUserTrips, useSharedTrips } from '../hooks/useFirestore';
@@ -33,27 +33,43 @@ export const TripProvider: React.FC<TripProviderProps> = ({ children }) => {
   const { data: userTrips, loading: userTripsLoading, error: userTripsError, refresh: refreshUserTrips } = useUserTrips(currentUser?.uid || '');
   const { data: sharedTripsData, loading: sharedTripsLoading, error: sharedTripsError, refresh: refreshSharedTrips } = useSharedTrips(currentUser?.uid || '');
 
+  const [optimisticTrips, setOptimisticTrips] = useState<Trip[] | null>(null);
+
+  const currentTrips = optimisticTrips ?? (userTrips as Trip[]) ?? [];
+
   const refreshTrips = async () => {
     await Promise.all([refreshUserTrips(), refreshSharedTrips()]);
   };
 
   const addTrip = (trip: Trip) => {
-    // The cache will be automatically updated by the useFirestore hook
-    refreshTrips();
+    setOptimisticTrips([...currentTrips, trip]);
+    refreshTrips().then(() => {
+      setOptimisticTrips(null); // Clear override, use fresh data
+    }).catch(() => {
+      setOptimisticTrips(null); // Rollback on failure
+    });
   };
 
   const updateTrip = (tripId: string, updatedTrip: Trip) => {
-    // The cache will be automatically updated by the useFirestore hook
-    refreshTrips();
+    setOptimisticTrips(currentTrips.map(t => t.id === tripId ? updatedTrip : t));
+    refreshTrips().then(() => {
+      setOptimisticTrips(null);
+    }).catch(() => {
+      setOptimisticTrips(null);
+    });
   };
 
   const removeTrip = (tripId: string) => {
-    // The cache will be automatically updated by the useFirestore hook
-    refreshTrips();
+    setOptimisticTrips(currentTrips.filter(t => t.id !== tripId));
+    refreshTrips().then(() => {
+      setOptimisticTrips(null);
+    }).catch(() => {
+      setOptimisticTrips(null);
+    });
   };
 
   const value = {
-    trips: (userTrips as Trip[]) || [],
+    trips: currentTrips,
     sharedTrips: (sharedTripsData as Trip[]) || [],
     loading: userTripsLoading || sharedTripsLoading,
     error: userTripsError || sharedTripsError,

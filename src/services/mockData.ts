@@ -13,6 +13,7 @@ export const mockTrips: Trip[] = [
         title: 'Summer Vibes',
         artist: 'Artist 1',
         duration: '3:45',
+        filePath: '',
         userId: 'mock-user-id',
         metadata: {
           bpm: 120,
@@ -27,6 +28,7 @@ export const mockTrips: Trip[] = [
         title: 'Sunset Dreams',
         artist: 'Artist 2',
         duration: '4:20',
+        filePath: '',
         userId: 'mock-user-id',
         metadata: {
           bpm: 110,
@@ -49,6 +51,7 @@ export const mockTrips: Trip[] = [
         title: 'Highway Star',
         artist: 'Artist 3',
         duration: '5:30',
+        filePath: '',
         userId: 'mock-user-id',
         metadata: {
           bpm: 140,
@@ -67,5 +70,5 @@ export const getTripById = (id: string): Trip | undefined => {
 
 export const getSongById = (tripId: string, songId: string): Song | undefined => {
   const trip = getTripById(tripId);
-  return trip?.songs.find(song => song.id === songId);
+  return trip?.songs?.find(song => song.id === songId);
 }; 

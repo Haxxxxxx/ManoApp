@@ -207,7 +207,6 @@ export class SoundCloudConnector extends BaseConnector {
     }
 
     // Check file size (SoundCloud has limits)
-    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
     for (const track of manifest.tracks || []) {
       if (track.song?.filePath) {
         // TODO: Check actual file size

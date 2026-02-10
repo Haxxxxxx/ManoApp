@@ -16,7 +16,6 @@ import {
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import { Song } from '../types/index';
 
@@ -176,14 +175,14 @@ const DynamicCard: React.FC<DynamicCardProps> = ({
           <Typography variant="h6" gutterBottom noWrap>
             {song.title}
           </Typography>
-          {song.subtitle && (
+          {song.artist && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }} noWrap>
-              {song.subtitle}
+              {song.artist}
             </Typography>
           )}
-          {song.description && (
+          {song.notes && (
             <Typography variant="body1" color="text.primary" sx={{ mb: 2 }} noWrap>
-              {song.description}
+              {song.notes}
             </Typography>
           )}
           {tags.length > 0 && (

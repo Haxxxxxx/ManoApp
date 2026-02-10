@@ -6,6 +6,7 @@ export interface UserProfile {
   bio?: string;
   location?: string;
   profession?: string;
+  role?: 'admin' | 'user';
   socialLinks?: {
     linkedin?: string;
     tiktok?: string;

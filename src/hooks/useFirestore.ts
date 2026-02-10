@@ -1,21 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  query, 
-  where, 
-  orderBy, 
-  limit,
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
   DocumentData,
   QueryConstraint,
   DocumentReference,
   onSnapshot,
-  updateDoc,
-  deleteDoc,
-  addDoc,
-  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Trip } from '../types/trip';

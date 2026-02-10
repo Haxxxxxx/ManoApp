@@ -25,7 +25,6 @@ import {
   FormControlLabel,
   useTheme,
   alpha,
-  Divider,
 } from '@mui/material';
 import {
   PlayArrow as PlayArrowIcon,
@@ -37,7 +36,7 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 import { useAudioMixer } from '../../hooks/useAudioMixer';
-import { Stem, MixdownExportSettings } from '../../types/stem';
+import { MixdownExportSettings } from '../../types/stem';
 import { Song } from '../../types/song';
 import { formatDuration } from '../../utils/formatters';
 

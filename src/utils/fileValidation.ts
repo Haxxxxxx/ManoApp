@@ -16,7 +16,6 @@ export const validateAudioFile = (
   }
 
   const fileType = file.type || '';
-  const extension = '.' + file.name.split('.').pop()?.toLowerCase();
 
   const isValidType = ALLOWED_AUDIO_TYPES.includes(fileType as typeof ALLOWED_AUDIO_TYPES[number]);
   const isValidExtension = ALLOWED_AUDIO_EXTENSIONS.some(ext => 

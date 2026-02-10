@@ -36,8 +36,6 @@ export function useSongs(options: UseSongsOptions = {}): UseSongsReturn {
       return;
     }
 
-    cancelledRef.current = false;
-
     try {
       setLoading(true);
       setError(null);
@@ -59,6 +57,7 @@ export function useSongs(options: UseSongsOptions = {}): UseSongsReturn {
   }, [tripId]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     if (autoFetch && tripId) {
       fetchSongs();
     } else if (!tripId) {

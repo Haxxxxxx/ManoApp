@@ -12,6 +12,7 @@ export interface AlbumSong {
     genre?: string[];
     tags?: string[];
     releaseDate?: string;
+    isrc?: string;
     featuring?: string[];
     lyrics?: string;
     videoUrl?: string;

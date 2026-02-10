@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { TripProvider } from './contexts/TripContext'
 import { ThemeProvider as CustomThemeProvider } from './contexts/ThemeContext'
@@ -10,19 +10,42 @@ import ProfilePage from './components/pages/ProfilePage'
 import Sidebar from './components/Sidebar'
 import SongDetail from './components/pages/SongDetail'
 import { Box } from '@mui/material'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import AlbumCustomizationPage from './components/pages/AlbumCustomizationPage'
 import AlbumsPage from './components/pages/AlbumsPage'
 import AlbumDetailPage from './components/pages/AlbumDetailPage'
+import AdminPage from './components/pages/AdminPage'
+import AnalyticsDashboardPage from './components/pages/AnalyticsDashboardPage'
 import ErrorBoundary from './components/common/ErrorBoundary'
+import NewFeaturesTour from './components/Onboarding/NewFeaturesTour'
+import { featureFlags, isFeatureEnabled } from './config/features'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { useGlobalSearch } from './hooks/useGlobalSearch'
+import CommandPalette from './components/common/CommandPalette'
+import ShortcutGuideDialog from './components/common/ShortcutGuideDialog'
 
 // Create a base theme that will be overridden by our custom theme
 const baseTheme = createTheme()
 
 function AppContent() {
   const [selectedTrip, setSelectedTrip] = useState<string | null>(null)
+  const [shortcutGuideOpen, setShortcutGuideOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const { toggle: toggleSearch } = useGlobalSearch()
+
+  // Wire keyboard shortcuts
+  const shortcuts = useCallback(() => {
+    if (!isFeatureEnabled('keyboardShortcuts')) return []
+    return [
+      { key: 'k', ctrlKey: true, metaKey: true, action: () => toggleSearch(), description: 'Command palette' },
+      { key: '?', shiftKey: true, action: () => setShortcutGuideOpen(true), description: 'Shortcut guide' },
+      { key: 'd', altKey: true, action: () => navigate('/'), description: 'Dashboard' },
+      { key: 'Escape', action: () => setShortcutGuideOpen(false), description: 'Close' },
+    ]
+  }, [toggleSearch, navigate])
+
+  useKeyboardShortcuts(shortcuts())
 
   // Extract trip ID from URL if available
   useEffect(() => {
@@ -43,9 +66,9 @@ function AppContent() {
   return (
     <Box sx={{ display: 'flex', height: '100vh', width: '100%' }}>
       <Sidebar selectedTrip={selectedTrip} onSelectTrip={handleSelectTrip} />
-      <Box 
-        sx={{ 
-          flexGrow: 1, 
+      <Box
+        sx={{
+          flexGrow: 1,
           overflow: 'auto',
           width: '100%', // Use full width
         }}
@@ -59,10 +82,25 @@ function AppContent() {
           <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
           <Route path="/albums/create" element={<AlbumCustomizationPage />} />
           <Route path="/albums/:albumId/edit" element={<AlbumCustomizationPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/analytics" element={<AnalyticsDashboardPage />} />
         </Routes>
       </Box>
+      {isFeatureEnabled('globalSearch') && <CommandPalette />}
+      {isFeatureEnabled('keyboardShortcuts') && (
+        <ShortcutGuideDialog open={shortcutGuideOpen} onClose={() => setShortcutGuideOpen(false)} />
+      )}
     </Box>
   )
+}
+
+function AppWithOnboarding() {
+  return (
+    <>
+      <AppContent />
+      <NewFeaturesTour flags={featureFlags} />
+    </>
+  );
 }
 
 function App() {
@@ -82,7 +120,7 @@ function App() {
                 <ErrorBoundary>
                   <Routes>
                     <Route path="/auth" element={<AuthForm />} />
-                    <Route path="/*" element={<AppContent />} />
+                    <Route path="/*" element={<AppWithOnboarding />} />
                   </Routes>
                 </ErrorBoundary>
               </TripProvider>

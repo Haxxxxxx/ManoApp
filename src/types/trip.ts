@@ -13,7 +13,7 @@ export interface Trip {
   collaborators?: string[];
   tags?: string[];
   coverImage?: string;
-  type?: 'project' | 'playlist' | 'single' | 'album';
+  type?: 'project' | 'playlist' | 'single' | 'ep' | 'album' | 'mixtape';
   status?: TripStatus;
   isPrivate?: boolean;
   template?: string;

@@ -86,8 +86,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (data) {
           // Safely convert Firestore timestamps to Date objects
           const convertTimestamp = (timestamp: unknown): Date => {
-            if (timestamp && typeof timestamp.toDate === 'function') {
-              return timestamp.toDate();
+            if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp && typeof (timestamp as { toDate?: () => Date }).toDate === 'function') {
+              return (timestamp as { toDate: () => Date }).toDate();
             } else if (timestamp instanceof Date) {
               return timestamp;
             } else if (typeof timestamp === 'string') {
@@ -183,11 +183,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     
     // Add timestamp to the update data
-    const updateData = {
+    const updateData: Partial<Omit<ArtistProfile, 'createdAt' | 'updatedAt' | 'id' | 'userId'>> & { updatedAt: ReturnType<typeof Timestamp.fromDate> } = {
       ...cleanData,
       updatedAt: Timestamp.fromDate(new Date())
     };
-    
+
     // Update in database
     await updateArtistProfile(currentUser.uid, updateData);
     
@@ -266,8 +266,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const data = artistProfileSnap.data();
         if (data) {
           const convertTimestamp = (timestamp: unknown): Date => {
-            if (timestamp && typeof timestamp.toDate === 'function') {
-              return timestamp.toDate();
+            if (timestamp && typeof timestamp === 'object' && 'toDate' in timestamp && typeof (timestamp as { toDate?: () => Date }).toDate === 'function') {
+              return (timestamp as { toDate: () => Date }).toDate();
             } else if (timestamp instanceof Date) {
               return timestamp;
             } else if (typeof timestamp === 'string') {

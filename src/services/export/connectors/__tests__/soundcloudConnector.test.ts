@@ -4,7 +4,6 @@
 
 import { SoundCloudConnector } from '../soundcloudConnector';
 import { ReleaseManifest, RightsSplit } from '../../../../types/export';
-import { Song } from '../../../../types/song';
 
 // Mock Firebase Functions
 jest.mock('firebase/functions', () => ({

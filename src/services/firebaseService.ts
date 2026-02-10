@@ -1,14 +1,13 @@
 import { db } from '../firebase/config';
-import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
 import { Trip } from '../types/trip';
 import { Song } from '../types/song';
 import { auth } from '../firebase/config';
 import { ref, deleteObject, uploadString, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase/config';
 import { FirebaseStorage } from 'firebase/storage';
-import { UserProfile } from '../types/user';
 import { ArtistProfile } from '../types/artist';
-import { Album, AlbumSong } from '../types/album';
+import { Album } from '../types/album';
 import { ActivityItem } from '../types/activity';
 import { Release } from '../types/release';
 import { FILE_SIZE_LIMITS } from '../utils/constants';
@@ -524,7 +523,16 @@ export const getAnalytics = async (userId: string): Promise<any> => {
     
     const songs: Song[] = [];
     songsSnapshot.forEach((doc) => {
-      songs.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      songs.push({
+        id: doc.id,
+        title: data.title || 'Untitled',
+        artist: data.artist || 'Unknown',
+        duration: data.duration || '0:00',
+        filePath: data.filePath || '',
+        userId: data.userId || userId,
+        ...data
+      } as Song);
     });
     
     // Calculate analytics
@@ -846,9 +854,9 @@ export const updateUserProfile = async (userId: string, data: Partial<ArtistProf
     }, {} as Record<string, unknown>);
     
     // Prepare update data
-    const updateData: Partial<ArtistProfile> & { updatedAt?: ReturnType<typeof serverTimestamp>; createdAt?: ReturnType<typeof serverTimestamp> } = {
+    const updateData: Record<string, unknown> = {
       ...cleanData,
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp() as unknown as Date
     };
     
     // Check if artist document exists
@@ -1216,4 +1224,18 @@ export const deleteRelease = async (releaseId: string): Promise<void> => {
   } catch (error) {
     throw error;
   }
+};
+
+/**
+ * Update sort order for multiple songs atomically
+ */
+export const updateSongOrder = async (
+  songOrders: Array<{ songId: string; sortOrder: number }>
+): Promise<void> => {
+  const batch = writeBatch(db);
+  for (const { songId, sortOrder } of songOrders) {
+    const songRef = doc(db, songsCollection, songId);
+    batch.update(songRef, { 'metadata.sortOrder': sortOrder });
+  }
+  await batch.commit();
 }; 

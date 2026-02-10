@@ -1,11 +1,9 @@
 import { useState, useCallback } from 'react';
-import { 
-  ref, 
-  uploadBytes, 
-  getDownloadURL, 
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
   deleteObject,
-  UploadResult,
-  StorageReference
 } from 'firebase/storage';
 import { storage } from '../firebase/config';
 

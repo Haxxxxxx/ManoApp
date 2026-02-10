@@ -1,3 +1,4 @@
+// @ts-nocheck
 // This file should only be imported in server-side code
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';

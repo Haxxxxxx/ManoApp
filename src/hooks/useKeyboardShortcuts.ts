@@ -56,8 +56,11 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[]) {
 export const COMMON_SHORTCUTS = {
   CREATE_PROJECT: { key: 'n', ctrlKey: true, description: 'Create new project' },
   SEARCH: { key: 'k', ctrlKey: true, description: 'Open search' },
+  COMMAND_PALETTE: { key: 'k', ctrlKey: true, description: 'Open command palette' },
   UPLOAD: { key: 'u', ctrlKey: true, description: 'Upload files' },
   SAVE: { key: 's', ctrlKey: true, description: 'Save changes' },
   ESCAPE: { key: 'Escape', description: 'Close dialog/panel' },
+  SHORTCUT_GUIDE: { key: '?', shiftKey: true, description: 'Show keyboard shortcuts' },
+  GO_DASHBOARD: { key: 'd', altKey: true, description: 'Go to dashboard' },
 } as const;
 

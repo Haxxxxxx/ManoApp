@@ -19,7 +19,13 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DownloadIcon from '@mui/icons-material/Download';
+import SendIcon from '@mui/icons-material/Send';
 import { RightsSplit } from '../types/export';
+import { httpsCallable, Functions } from 'firebase/functions';
+import { functions } from '../firebase/config';
+import { SplitSheetFormat } from '../types/splitSheet';
+import { isFeatureEnabled } from '../config/features';
 
 export interface RightsEditorProps {
   /** Initial rights splits */
@@ -36,6 +42,9 @@ export interface RightsEditorProps {
   
   /** Show validation errors */
   showValidation?: boolean;
+  
+  /** Release ID for split-sheet generation */
+  releaseId?: string;
 }
 
 export const RightsEditor: React.FC<RightsEditorProps> = ({
@@ -44,6 +53,7 @@ export const RightsEditor: React.FC<RightsEditorProps> = ({
   onChange,
   readOnly = false,
   showValidation = true,
+  releaseId,
 }) => {
   const [splits, setSplits] = useState<RightsSplit[]>(initialSplits);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -123,6 +133,64 @@ export const RightsEditor: React.FC<RightsEditorProps> = ({
       handleSplitChange(index, 'userId', userId);
       handleSplitChange(index, 'name', collaborator.name);
     }
+  };
+
+  const handleExportSplitSheet = async () => {
+    if (!releaseId) {
+      alert('Release ID is required to generate split-sheet. Please save the release first.');
+      return;
+    }
+
+    if (splits.length === 0) {
+      alert('No rights splits defined. Please add collaborators first.');
+      return;
+    }
+    
+    // Show format selection dialog
+    const format = window.confirm('Export as PDF? (Cancel for CSV)') ? 'pdf' : 'csv';
+    
+    try {
+      if (!functions) {
+        throw new Error('Firebase Functions service is not available');
+      }
+
+      const generate = httpsCallable<
+        { releaseId: string; format: SplitSheetFormat },
+        { data: string; format: string; mimeType: string; filename: string }
+      >(functions as Functions, 'generateSplitSheet');
+
+      const result = await generate({ releaseId, format });
+
+      if (!result.data) {
+        throw new Error('Invalid response from split-sheet service');
+      }
+
+      // Download file — decode base64 with error handling
+      let decodedData: string;
+      try {
+        decodedData = atob(result.data.data);
+      } catch {
+        throw new Error('Failed to decode split-sheet data: invalid base64');
+      }
+      const blob = new Blob(
+        [Uint8Array.from(decodedData, (c) => c.charCodeAt(0))],
+        { type: result.data.mimeType }
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export split-sheet:', error);
+      alert(`Failed to export split-sheet: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleSendForSignature = async () => {
+    // TODO: Implement send for signature flow
+    alert('Send for signature feature coming soon');
   };
 
   const total = calculateTotal();
@@ -267,6 +335,27 @@ export const RightsEditor: React.FC<RightsEditorProps> = ({
         <Alert severity="success" sx={{ mt: 2 }}>
           Rights splits are valid
         </Alert>
+      )}
+
+      {!readOnly && splits.length > 0 && isFeatureEnabled('splitSheet') && (
+        <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
+          <Button
+            startIcon={<DownloadIcon />}
+            onClick={handleExportSplitSheet}
+            variant="outlined"
+            size="small"
+          >
+            Export Split Sheet
+          </Button>
+          <Button
+            startIcon={<SendIcon />}
+            onClick={handleSendForSignature}
+            variant="outlined"
+            size="small"
+          >
+            Send for Signature
+          </Button>
+        </Box>
       )}
     </Paper>
   );

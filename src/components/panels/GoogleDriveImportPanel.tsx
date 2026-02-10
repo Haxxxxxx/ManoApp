@@ -16,18 +16,11 @@ import {
   ListItemIcon,
   CircularProgress,
   Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   IconButton,
   Chip,
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import FolderIcon from '@mui/icons-material/Folder';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
 import CloseIcon from '@mui/icons-material/Close';
 import { isFeatureEnabled } from '../../config/features';
 import {
@@ -58,8 +51,6 @@ const GoogleDriveImportPanel: React.FC<GoogleDriveImportPanelProps> = ({
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<string | null>(null);
   const [nextPageToken, setNextPageToken] = useState<string | undefined>();
-  const [showOAuthDialog, setShowOAuthDialog] = useState(false);
-  const [oauthUrl, setOAuthUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isFeatureEnabled('gdriveImport')) {
@@ -91,8 +82,7 @@ const GoogleDriveImportPanel: React.FC<GoogleDriveImportPanelProps> = ({
   const handleConnect = async () => {
     try {
       const { authUrl, state } = await startGoogleDriveOAuth();
-      setOAuthUrl(authUrl);
-      
+
       // Store state in sessionStorage for callback
       sessionStorage.setItem('gdrive_oauth_state', state);
       

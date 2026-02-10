@@ -221,6 +221,12 @@ export const useAudioMixer = (
     // Prevent double-play
     if (isPlayingRef.current) return;
 
+    // Cancel any existing animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
     try {
       // Resume audio context if suspended
       if (audioContextRef.current.state === 'suspended') {
@@ -328,7 +334,7 @@ export const useAudioMixer = (
       // Use OfflineAudioContext for rendering
       const maxDuration = Math.max(...stems.map(s => s.duration));
       const offlineContext = new OfflineAudioContext(
-        sampleRate,
+        2,
         Math.ceil(maxDuration * sampleRate),
         sampleRate
       );

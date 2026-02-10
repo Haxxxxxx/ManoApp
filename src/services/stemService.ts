@@ -4,7 +4,7 @@
  * Service for managing stems (multitrack audio files) for songs
  */
 
-import { collection, doc, getDoc, updateDoc, arrayUnion, arrayRemove, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Stem } from '../types/stem';
 import { Song } from '../types/song';
@@ -166,7 +166,7 @@ export const reorderStems = async (songId: string, stemIds: string[]): Promise<S
         const stem = existingStems.find(s => s.id === id);
         return stem ? { ...stem, order: index } : null;
       })
-      .filter((stem): stem is Stem => stem !== null) as Stem[];
+      .filter((stem): stem is Stem => stem !== null);
 
     // Add any stems not in the reorder list at the end
     const remainingStems = existingStems.filter(s => !stemIds.includes(s.id));

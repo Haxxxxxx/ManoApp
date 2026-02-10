@@ -8,14 +8,13 @@ import React, { useState } from 'react';
 import {
   Box,
   Typography,
-  Paper,
   TextField,
   Button,
   MenuItem,
   Grid,
-  useTheme,
 } from '@mui/material';
 import { Release, ReleaseType, ChecklistItem } from '../../types/release';
+import { Song } from '../../types/song';
 import ReleaseChecklist from '../common/ReleaseChecklist';
 import { generateChecklist, calculateChecklistProgress } from '../../services/releaseChecklistService';
 import { useToast } from '../../hooks/useToast';
@@ -27,6 +26,7 @@ interface ReleasePlanningPanelProps {
   projectId: string;
   onClose: () => void;
   onCreateRelease?: (release: Omit<Release, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onUpdateRelease?: (releaseId: string, updates: Partial<Release>) => Promise<void>;
   existingRelease?: Release;
   collaborators?: Array<{ id: string; name: string }>;
   setActivePanel?: (panel: string) => void;
@@ -37,12 +37,12 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
   projectId,
   onClose,
   onCreateRelease,
+  onUpdateRelease,
   existingRelease,
   collaborators = [],
   setActivePanel,
-  songs = [],
+  songs: _songs = [],
 }) => {
-  const theme = useTheme();
   const { showSuccess, showError, ToastComponent } = useToast();
   const [title, setTitle] = useState(existingRelease?.title || '');
   const [description, setDescription] = useState(existingRelease?.description || '');
@@ -101,11 +101,22 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
         progress: calculateChecklistProgress(checklist),
         status: 'draft',
         releaseDate: releaseDate || undefined,
+        ...(rightsSplits.length > 0 && {
+          rightsSplits: rightsSplits.map(split => ({
+            userId: split.userId,
+            name: split.name,
+            percentage: split.percentage,
+            role: split.role,
+          })),
+        }),
       };
 
-      if (onCreateRelease) {
+      if (existingRelease?.id && onUpdateRelease) {
+        await onUpdateRelease(existingRelease.id, releaseData);
+        showSuccess('Release updated successfully');
+      } else if (onCreateRelease) {
         await onCreateRelease(releaseData);
-        showSuccess('Release saved successfully');
+        showSuccess('Release created successfully');
       }
     } catch (error) {
       showError('Failed to save release');
@@ -182,13 +193,14 @@ const ReleasePlanningPanel: React.FC<ReleasePlanningPanelProps> = ({
         </Grid>
       </Grid>
 
-      {isFeatureEnabled('soundcloud') && collaborators.length > 0 && (
+      {(isFeatureEnabled('soundcloud') || isFeatureEnabled('splitSheet')) && collaborators.length > 0 && (
         <Box sx={{ mt: 4 }}>
           <RightsEditor
             splits={rightsSplits}
             collaborators={collaborators}
             onChange={setRightsSplits}
             showValidation={true}
+            releaseId={existingRelease?.id}
           />
         </Box>
       )}

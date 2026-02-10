@@ -16,7 +16,6 @@ import {
   where,
   orderBy,
   onSnapshot,
-  Timestamp,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';

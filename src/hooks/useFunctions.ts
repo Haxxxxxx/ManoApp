@@ -1,8 +1,6 @@
 import { useState, useCallback } from 'react';
-import { 
+import {
   httpsCallable,
-  HttpsCallableResult,
-  Functions
 } from 'firebase/functions';
 import { functions } from '../firebase/config';
 

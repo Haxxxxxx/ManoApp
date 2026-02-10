@@ -135,22 +135,6 @@ const SearchBar: React.FC<SearchBarProps> = ({
             </InputAdornment>
           ),
         }}
-        sx={{
-          '& .MuiOutlinedInput-root': {
-            transition: 'all 0.2s ease',
-            '&:hover': {
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: theme.palette.primary.main,
-              },
-            },
-            '&.Mui-focused': {
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: theme.palette.primary.main,
-                borderWidth: 2,
-              },
-            },
-          },
-        }}
       />
     </Box>
   );

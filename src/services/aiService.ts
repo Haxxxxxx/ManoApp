@@ -11,8 +11,6 @@ import {
   AIMetadataRequest,
   AIMetadataResponse,
   SuggestedTag,
-  AIDetectedBPM,
-  AIDetectedKey,
 } from '../types/ai';
 
 /**
@@ -23,7 +21,7 @@ class MockAIAdapter {
   /**
    * Generate realistic fake metadata suggestions
    */
-  async generateMetadata(request: AIMetadataRequest): Promise<AIMetadata> {
+  async generateMetadata(_request: AIMetadataRequest): Promise<AIMetadata> {
     // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 500 + Math.random() * 1000));
 

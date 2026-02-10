@@ -6,7 +6,6 @@ import {
   Grid,
   TextField,
   Button,
-  Checkbox,
   List,
   ListItem,
   ListItemIcon,
@@ -19,9 +18,7 @@ import {
   DialogActions,
   CircularProgress,
   Alert,
-  Chip,
-  Stack,
-  useTheme
+  Stack
 } from '@mui/material';
 import {
   DragIndicator as DragIndicatorIcon,
@@ -31,7 +28,7 @@ import {
   ArrowUpward as ArrowUpwardIcon,
   ArrowDownward as ArrowDownwardIcon
 } from '@mui/icons-material';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { useAuth } from '../../contexts/AuthContext';
 import { Trip } from '../../types/trip';
 import { Song } from '../../types/song';
@@ -52,7 +49,6 @@ const CreateAlbumFromProjectPanel: React.FC<CreateAlbumFromProjectPanelProps> = 
   onClose,
   onAlbumCreated
 }) => {
-  const theme = useTheme();
   const { currentUser, artistProfile } = useAuth();
   const [albumData, setAlbumData] = useState({
     title: '',
@@ -64,6 +60,7 @@ const CreateAlbumFromProjectPanel: React.FC<CreateAlbumFromProjectPanelProps> = 
   });
   const [selectedSongs, setSelectedSongs] = useState<Song[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [, setIsLoading] = useState(false);
 
   // Use useSongs hook for proper data management
   const { songs, loading: isLoading, error: songsError } = useSongs({

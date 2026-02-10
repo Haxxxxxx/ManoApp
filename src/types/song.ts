@@ -12,11 +12,17 @@ export interface Song {
   file?: File;
   projectPath?: string;
   userId: string;
+  tripId?: string;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
   metadata?: SongMetadata;
   notes?: string;
   /** Array of stems (multitrack audio files) */
   stems?: Stem[];
+  status?: SongStatus;
 }
+
+export type SongStatus = 'draft' | 'in-review' | 'ready' | 'published' | 'archived';
 
 export type SongMetadata = {
   bpm?: number;
@@ -25,6 +31,7 @@ export type SongMetadata = {
   tags?: string[];
   releaseDate?: string;
   source?: 'local' | 'remote' | 'upload';
+  isrc?: string;
   featuring?: string[];
   lyrics?: string;
   videoUrl?: string;

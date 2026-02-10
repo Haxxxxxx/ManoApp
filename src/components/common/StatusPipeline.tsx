@@ -54,7 +54,7 @@ const StatusPipeline: React.FC<StatusPipelineProps> = ({
   const theme = useTheme();
   const currentIndex = STATUS_ORDER.indexOf(currentStatus);
 
-  const getStatusColor = (status: TripStatus, index: number) => {
+  const getStatusColor = (_status: TripStatus, index: number) => {
     if (index < currentIndex) {
       return theme.palette.success.main; // Completed
     }
@@ -75,7 +75,7 @@ const StatusPipeline: React.FC<StatusPipelineProps> = ({
           return (
             <Chip
               key={status}
-              icon={isCompleted ? <CheckCircle /> : config.icon}
+              icon={isCompleted ? <CheckCircle /> : (config.icon as React.ReactElement)}
               label={config.label}
               onClick={onStatusChange ? () => onStatusChange(status) : undefined}
               color={isActive ? 'primary' : isCompleted ? 'success' : 'default'}

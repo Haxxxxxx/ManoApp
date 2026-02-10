@@ -5,7 +5,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Box, IconButton, Slider, Typography, useTheme } from '@mui/material';
+import { Box, IconButton, Slider, Typography } from '@mui/material';
 import { PlayArrow, Pause, VolumeUp } from '@mui/icons-material';
 import { Stem } from '../../../types/stem';
 import { formatDuration } from '../../../utils/formatters';
@@ -17,7 +17,6 @@ interface StemPlayerProps {
 }
 
 const StemPlayer: React.FC<StemPlayerProps> = ({ stem, volume = 1.0, onVolumeChange }) => {
-  const theme = useTheme();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);

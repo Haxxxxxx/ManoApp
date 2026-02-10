@@ -7,7 +7,7 @@
  * https://developers.soundcloud.com/docs/api/guide
  */
 
-import { ReleaseManifest, SubmissionPayload } from '../../../types/export';
+import { ReleaseManifest } from '../../../types/export';
 
 /**
  * SoundCloud track payload

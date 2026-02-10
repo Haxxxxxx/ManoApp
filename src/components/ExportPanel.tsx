@@ -31,8 +31,12 @@ import ErrorIcon from '@mui/icons-material/Error';
 import WarningIcon from '@mui/icons-material/Warning';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import HistoryIcon from '@mui/icons-material/History';
-import { PreflightResult, PreflightIssue, SubmissionResult } from '../types/export';
+import { PreflightResult, SubmissionResult } from '../types/export';
 import { ReleaseManifest } from '../types/export';
+import { ExportPreset } from '../types/preset';
+import { getPresets } from '../services/presetService';
+import { Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+import { isFeatureEnabled } from '../config/features';
 
 export interface ExportPanelProps {
   /** Release manifest to export */
@@ -82,10 +86,50 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
   const [runningPreflight, setRunningPreflight] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [exportResults, setExportResults] = useState<SubmissionResult[]>([]);
+  const [presets, setPresets] = useState<ExportPreset[]>([]);
+  const [selectedPreset, setSelectedPreset] = useState<string>('');
 
   useEffect(() => {
     setCurrentPreflight(preflightResult);
   }, [preflightResult]);
+
+  useEffect(() => {
+    // Load presets when providers are selected (only if feature enabled)
+    if (selectedProviders.length > 0 && isFeatureEnabled('exportPresets')) {
+      loadPresets(selectedProviders[0]);
+    }
+  }, [selectedProviders]);
+
+  const loadPresets = async (providerId: string) => {
+    try {
+      const loadedPresets = await getPresets(providerId);
+      setPresets(loadedPresets);
+      
+      // Auto-select default preset
+      const defaultPreset = loadedPresets.find((p) => p.isDefault);
+      if (defaultPreset) {
+        setSelectedPreset(defaultPreset.id);
+        applyPreset(defaultPreset);
+      }
+    } catch (error) {
+      console.error('Failed to load presets:', error);
+    }
+  };
+
+  const applyPreset = (preset: ExportPreset) => {
+    // Apply preset settings to manifest
+    // This would update the manifest with preset settings
+    // Implementation depends on how manifest is managed
+    console.log('Applying preset:', preset);
+  };
+
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPreset(presetId);
+    const preset = presets.find((p) => p.id === presetId);
+    if (preset) {
+      applyPreset(preset);
+    }
+  };
 
   const handleProviderToggle = (providerId: string) => {
     setSelectedProviders((prev) =>
@@ -230,6 +274,26 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
               Choose which platforms to export your release to.
             </Typography>
           </Box>
+
+          {selectedProviders.length > 0 && isFeatureEnabled('exportPresets') && presets.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <FormControl fullWidth>
+                <InputLabel>Export Preset</InputLabel>
+                <Select
+                  value={selectedPreset}
+                  onChange={(e) => handlePresetChange(e.target.value)}
+                  label="Export Preset"
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {presets.map((preset) => (
+                    <MenuItem key={preset.id} value={preset.id}>
+                      {preset.name} {preset.isDefault && '(Default)'}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
 
           <Box sx={{ mb: 3 }}>
             {providers.map((provider) => (

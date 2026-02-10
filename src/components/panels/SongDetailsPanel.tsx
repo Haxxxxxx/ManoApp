@@ -6,50 +6,36 @@ import {
   Grid,
   IconButton,
   Chip,
-  Divider,
   Button,
   TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   CircularProgress,
   Alert,
   Tabs,
   Tab,
   Stack,
-  Card,
-  CardMedia,
-  CardContent,
-  InputAdornment,
   useTheme,
-  Slider,
   alpha,
   Fade,
   Zoom,
   Drawer,
   useMediaQuery
 } from '@mui/material';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import PauseIcon from '@mui/icons-material/Pause';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
 import ImageIcon from '@mui/icons-material/Image';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
-import SkipNextIcon from '@mui/icons-material/SkipNext';
-import SkipPreviousIcon from '@mui/icons-material/SkipPrevious';
-import VolumeUpIcon from '@mui/icons-material/VolumeUp';
-import VolumeOffIcon from '@mui/icons-material/VolumeOff';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import CommentIcon from '@mui/icons-material/Comment';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { Song } from '../../types/song';
+import type { SongStatus } from '../../types/song';
+import SongStatusBadge from '../common/SongStatusBadge';
+import MetadataCompletenessIndicator from '../common/MetadataCompletenessIndicator';
 import { isFeatureEnabled } from '../../config/features';
 import { updateSong, getSong } from '../../services/firebaseService';
-import { getAudioUrl, uploadCoverArt } from '../../services/storageService';
-import { getStorage, ref, getDownloadURL } from 'firebase/storage';
+import { uploadCoverArt } from '../../services/storageService';
 import { audioService } from '../../services/audioService';
 import { STORAGE_KEYS, storageHelpers } from '../../utils/storageHelpers';
 import { formatDuration, formatDurationFromString } from '../../utils/formatters';
@@ -111,11 +97,9 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   onOpenMixer,
   onOpenComments,
   projectId,
-  collaborators = []
+  collaborators: _collaborators = []
 }) => {
   const theme = useTheme();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -126,19 +110,13 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   const [newGenre, setNewGenre] = useState('');
   const [newFeat, setNewFeat] = useState('');
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
-  const [filteredTags, setFilteredTags] = useState<string[]>([]);
   const [showGenreSuggestions, setShowGenreSuggestions] = useState(false);
   const [filteredGenres, setFilteredGenres] = useState<string[]>([]);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [filteredTags, setFilteredTags] = useState<string[]>([]);
+  const [_duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isLocalFile, setIsLocalFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const blobUrlRef = useRef<string | null>(null);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const volumeSliderRef = useRef<HTMLDivElement>(null);
 
   // Default tags for different genres and moods
   const defaultTags = {
@@ -286,22 +264,6 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     }
   };
 
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      const currentTime = audioRef.current.currentTime;
-      const duration = audioRef.current.duration;
-      setCurrentTime(currentTime);
-      setDuration(duration);
-    }
-  };
-
-  const handleEnded = () => {
-    setIsPlaying(false);
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-    }
-  };
-
   // Function to get MIME type from file extension
   const getMimeType = (fileName: string): string => {
     const extension = fileName.split('.').pop()?.toLowerCase();
@@ -319,37 +281,9 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     }
   };
 
-  // Function to get file info from localStorage
-  const getFileDataFromLocalStorage = () => {
-    return storageHelpers.getItem(STORAGE_KEYS.FILE_INFO(song.id));
-  };
-
   // Add a function to store blob URL in localStorage
   const storeBlobUrl = (songId: string, blobUrl: string) => {
     storageHelpers.setItem(STORAGE_KEYS.BLOB_URL(songId), blobUrl);
-  };
-
-  // Add a function to get blob URL from localStorage
-  const getBlobUrl = (songId: string): string | null => {
-    return storageHelpers.getItem<string>(STORAGE_KEYS.BLOB_URL(songId));
-  };
-
-  // Add function to get authenticated URL
-  const getAuthenticatedUrl = async (filePath: string): Promise<string> => {
-    try {
-      // If it's already a full URL, try to get a fresh authenticated URL
-      if (filePath.startsWith('https://')) {
-        const storage = getStorage();
-        const pathWithoutParams = filePath.split('?')[0];
-        const storagePath = decodeURIComponent(pathWithoutParams.split('/o/')[1]);
-        const storageRef = ref(storage, storagePath);
-        return await getDownloadURL(storageRef);
-      }
-      return filePath;
-    } catch (error) {
-      // Error getting authenticated URL
-      return filePath;
-    }
   };
 
   // Update useEffect for audio initialization
@@ -390,33 +324,6 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     initializeAudio();
   }, [song.filePath]);
 
-  const handlePlayPause = () => {
-    if (!audioElement) {
-      setError('Audio element not initialized');
-      return;
-    }
-
-    if (isPlaying) {
-      audioElement.pause();
-      setIsPlaying(false);
-    } else {
-      audioElement.play()
-        .then(() => {
-          setIsPlaying(true);
-          setError(null);
-        })
-        .catch(error => {
-          // Error playing audio
-          setError(`Failed to play audio file: ${error.message}`);
-          setIsPlaying(false);
-        });
-    }
-  };
-
-  const handleEdit = () => {
-    setIsEditing(true);
-  };
-
   const handleSave = async () => {
     try {
       setIsLoading(true);
@@ -443,7 +350,7 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   };
 
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
     
     // Auto-open mixer if stems tab is selected and mixer callback is available
@@ -461,40 +368,6 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
         onOpenComments &&
         newValue === (isFeatureEnabled('stemsAndMixer') && song.stems && song.stems.length > 0 ? 5 : 4)) {
       onOpenComments(song.id);
-    }
-  };
-
-  const handleAddTag = async () => {
-    if (!newTag.trim()) return;
-    
-    const updatedTags = [...new Set([...(editedSong.metadata?.tags || []), newTag.trim()])];
-    
-    // Update local state immediately for responsive UI
-    const updatedSong = {
-      ...editedSong,
-      metadata: {
-        ...editedSong.metadata,
-        tags: updatedTags
-      }
-    };
-    
-    // Update local state immediately
-    setEditedSong(updatedSong);
-    
-    // Clear the input
-    setNewTag('');
-    
-    try {
-      // Update the song in Firebase
-      await updateSong(editedSong.id, updatedSong);
-      
-      // Notify parent component
-      onSongUpdated(updatedSong);
-    } catch (error) {
-      // Error adding tag
-      
-      // Revert local state if Firebase update fails
-      setEditedSong(song);
     }
   };
 
@@ -692,9 +565,6 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
       setEditedSong(updatedSong);
       onSongUpdated(updatedSong);
 
-      // Set the audio URL state
-      setAudioUrl(blobUrl);
-
       // Initialize audio with the new file
       if (audioElement) {
         audioElement.src = blobUrl;
@@ -744,34 +614,6 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
     setNewFeat('');
     setShowTagSuggestions(false);
   }, [song]);
-
-  const handleVolumeChange = (event: Event, newValue: number | number[]) => {
-    const volumeValue = newValue as number;
-    setVolume(volumeValue);
-    if (audioElement) {
-      audioElement.volume = volumeValue;
-    }
-  };
-
-  const handleMuteToggle = () => {
-    if (audioElement) {
-      if (isMuted) {
-        audioElement.volume = volume;
-        setIsMuted(false);
-      } else {
-        audioElement.volume = 0;
-        setIsMuted(true);
-      }
-    }
-  };
-
-  const handleProgressChange = (event: Event, newValue: number | number[]) => {
-    if (audioElement) {
-      const time = (newValue as number) * audioElement.duration;
-      audioElement.currentTime = time;
-      setCurrentTime(time);
-    }
-  };
 
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -867,6 +709,24 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
               >
                 {isEditing ? 'Edit Song' : song.title}
               </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <SongStatusBadge
+                  status={(editedSong.status as SongStatus) || 'draft'}
+                  onChange={async (newStatus) => {
+                    const updated = { ...editedSong, status: newStatus };
+                    setEditedSong(updated);
+                    try {
+                      await updateSong(editedSong.id, { status: newStatus });
+                      onSongUpdated(updated);
+                    } catch {
+                      setEditedSong(song);
+                    }
+                  }}
+                />
+                {isFeatureEnabled('metadataCompleteness') && (
+                  <MetadataCompletenessIndicator song={editedSong} compact />
+                )}
+              </Box>
               {!isEditing && song.artist && (
                 <Typography 
                   variant="body2" 
@@ -1629,12 +1489,28 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
         </TabPanel>
 
         <TabPanel value={activeTab} index={3}>
+          {isFeatureEnabled('aiMetadata') && (
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<AutoAwesomeIcon />}
+                onClick={() => {
+                  // The AI metadata panel is rendered inline below when toggled
+                  setActiveTab(3); // stay on metadata tab — AI assist is contextual
+                }}
+                sx={{ borderRadius: 2 }}
+              >
+                AI Assist
+              </Button>
+            </Box>
+          )}
           <Grid container spacing={3}>
             <Grid item xs={12}>
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  p: 2, 
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
                   bgcolor: 'background.default',
                   borderRadius: 2
                 }}
