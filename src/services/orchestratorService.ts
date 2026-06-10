@@ -57,3 +57,27 @@ export async function getSubmissions(
   return result.data.submissions;
 }
 
+/**
+ * Poll providers for in-flight submissions and return the updated set
+ */
+export async function refreshSubmissions(
+  releaseId: string
+): Promise<Record<string, ProviderSubmission>> {
+  if (!functions) {
+    throw new Error('Firebase Functions service is not available');
+  }
+
+  const refresh = httpsCallable<
+    { releaseId: string },
+    { submissions: Record<string, ProviderSubmission> }
+  >(functions as Functions, 'refreshReleaseSubmissions');
+
+  const result = await refresh({ releaseId });
+
+  if (!result.data || !result.data.submissions) {
+    throw new Error('Invalid response from refresh service');
+  }
+
+  return result.data.submissions;
+}
+

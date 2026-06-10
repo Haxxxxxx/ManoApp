@@ -79,7 +79,7 @@ export const featureFlags: FeatureFlags = {
   comments: true,
   gdriveImport: false,
   soundcloud: true,
-  distributor: false,
+  distributor: true,
   fingerprint: false,
   exportPresets: true,
   splitSheet: false,

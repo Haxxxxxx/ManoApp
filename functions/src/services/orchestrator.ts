@@ -105,8 +105,16 @@ export async function distributeRelease(
     description: releaseData.description,
     type: releaseData.type || 'single',
     releaseDate: releaseData.releaseDate,
+    genre: releaseData.genre,
+    tags: releaseData.tags,
+    artworkUrl: releaseData.artworkUrl || releaseData.coverUrl,
     tracks,
     rightsSplits: releaseData.rightsSplits || [],
+    metadata: {
+      upc: releaseData.upc,
+      label: releaseData.label,
+      primaryArtist: releaseData.artist,
+    },
   };
 
   // Run preflight validation

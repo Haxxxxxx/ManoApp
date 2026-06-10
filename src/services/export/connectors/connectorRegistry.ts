@@ -9,6 +9,7 @@ import { SpotifyConnector } from './spotifyConnector';
 import { AppleConnector } from './appleConnector';
 import { AmazonConnector } from './amazonConnector';
 import { YouTubeConnector } from './youtubeConnector';
+import { RevelatorConnector } from './revelatorConnector';
 
 export const PLATFORM_CONFIGS: Record<PlatformId, PlatformConfig> = {
   soundcloud: {
@@ -58,6 +59,15 @@ export const PLATFORM_CONFIGS: Record<PlatformId, PlatformConfig> = {
     maxTitleLength: 100,
     maxDescriptionLength: 5000,
   },
+  revelator: {
+    id: 'revelator',
+    name: 'Revelator (All DSPs)',
+    icon: 'revelator',
+    audioFormat: 'wav',
+    requiresAuth: false,
+    exportOnly: false,
+    maxTitleLength: 255,
+  },
 };
 
 const connectorFactories: Record<PlatformId, () => ProviderConnector> = {
@@ -66,6 +76,7 @@ const connectorFactories: Record<PlatformId, () => ProviderConnector> = {
   apple: () => new AppleConnector(),
   amazon: () => new AmazonConnector(),
   youtube: () => new YouTubeConnector(),
+  revelator: () => new RevelatorConnector(),
 };
 
 export function getConnector(platformId: PlatformId): ProviderConnector {
