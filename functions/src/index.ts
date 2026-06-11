@@ -34,6 +34,11 @@ export {
 export { distributeReleaseToProviders } from './api/releases/distribute';
 export { getReleaseSubmissions, refreshReleaseSubmissions } from './api/releases/submissions';
 
+// Export billing (Stripe subscriptions) functions
+export { createCheckoutSession } from './api/billing/checkout';
+export { createBillingPortalSession } from './api/billing/portal';
+export { stripeWebhook } from './api/billing/webhook';
+
 // Export fingerprinting functions
 export { computeAssetFingerprint } from './api/assets/fingerprint';
 
