@@ -1,6 +1,6 @@
 import { User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInAnonymously } from 'firebase/auth';
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { auth } from '../firebase/config';
+import { auth, usingEmulators } from '../firebase/config';
 import { Box, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
@@ -203,13 +203,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  // Dev bypass function - uses Firebase anonymous authentication for development
+  // Dev bypass function - anonymous sign-in against the local Auth emulator.
+  // Anonymous auth is disabled in production Firebase, so this only works in
+  // emulator mode: `npm run emulators` in one terminal, `npm run dev:emu` in
+  // another.
   const devBypass = async () => {
     try {
       // Dev-server builds only — a production bundle previewed on localhost
       // must NOT expose the anonymous-auth bypass
       if (!import.meta.env.DEV) {
         return;
+      }
+      if (!usingEmulators) {
+        throw new Error(
+          'Dev bypass needs the local emulator suite: run `npm run emulators`, then start the app with `npm run dev:emu`.'
+        );
       }
 
       setLoading(true);
