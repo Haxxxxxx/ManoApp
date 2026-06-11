@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:emu": "VITE_USE_EMULATORS=true vite",
+    "emulators": "npx -y firebase-tools@latest emulators:start --only auth,firestore,storage",
+    "emulators:functions": "npm --prefix functions run build && npx -y firebase-tools@latest emulators:start --only auth,firestore,storage,functions",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

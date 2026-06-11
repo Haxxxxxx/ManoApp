@@ -1,8 +1,8 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getStorage, FirebaseStorage } from 'firebase/storage';
-import { getFunctions, Functions } from 'firebase/functions';
+import { getAuth, connectAuthEmulator, Auth } from 'firebase/auth';
+import { getFirestore, connectFirestoreEmulator, Firestore } from 'firebase/firestore';
+import { getStorage, connectStorageEmulator, FirebaseStorage } from 'firebase/storage';
+import { getFunctions, connectFunctionsEmulator, Functions } from 'firebase/functions';
 
 // Load environment variables
 const env = import.meta.env;
@@ -77,6 +77,26 @@ try {
   // Error initializing Firebase Functions - critical error
   if (env.PROD) {
     throw error;
+  }
+}
+
+// Local emulator suite (npm run dev:emu + npm run emulators).
+// Auth, Firestore, and Storage must be swapped together: tokens minted by
+// the Auth emulator are rejected by production services, so a partial
+// connection would break every authed call. This is also the only way the
+// dev bypass works now that anonymous sign-in is disabled in production.
+export const usingEmulators = env.DEV && env.VITE_USE_EMULATORS === 'true';
+if (usingEmulators) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  if (storage) {
+    connectStorageEmulator(storage, '127.0.0.1', 9199);
+  }
+  if (functions) {
+    // Requires `npm run emulators:functions`; with the lighter `npm run
+    // emulators`, callable invocations fail fast with connection refused
+    // instead of silently hitting production with an emulator token
+    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
   }
 }
 

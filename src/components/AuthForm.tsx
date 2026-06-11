@@ -10,6 +10,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import { usingEmulators } from '../firebase/config';
 
 const AuthForm = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -17,8 +18,9 @@ const AuthForm = () => {
   const [password, setPassword] = useState('');
   const { login, signup, loading, devBypass } = useAuth();
   const [error, setError] = useState<Error | null>(null);
-  // Dev-server builds only — keep in sync with the guard inside devBypass()
-  const isDev = import.meta.env.DEV;
+  // Bypass works only against the local Auth emulator (anonymous sign-in is
+  // disabled in production) — keep in sync with the guard inside devBypass()
+  const isDev = import.meta.env.DEV && usingEmulators;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
