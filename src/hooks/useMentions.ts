@@ -46,9 +46,15 @@ interface UseMentionsReturn {
   
   /** Insert mention at cursor position */
   insertMention: (collaborator: Collaborator) => void;
-  
+
   /** Check if cursor is in a mention context */
   isInMentionContext: boolean;
+
+  /**
+   * Report the current cursor position — the consuming input must call
+   * this (onSelect/onKeyUp/onClick) or mention autocomplete never triggers
+   */
+  setCursorPosition: (position: number) => void;
 }
 
 /**
@@ -160,6 +166,7 @@ export const useMentions = (options: UseMentionsOptions): UseMentionsReturn => {
     mentionQuery,
     insertMention,
     isInMentionContext,
+    setCursorPosition,
   };
 };
 

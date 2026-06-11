@@ -100,6 +100,15 @@ const CommentComposer: React.FC<CommentComposerProps> = ({
           value={text}
           onChange={(e) => {
             setText(e.target.value);
+            mentions.setCursorPosition(
+              (e.target as HTMLTextAreaElement).selectionStart ?? e.target.value.length
+            );
+          }}
+          onSelect={(e) => {
+            // Track caret moves (clicks/arrow keys) so @mention autocomplete
+            // knows where the cursor is — without this it never triggers
+            const target = e.target as HTMLTextAreaElement;
+            mentions.setCursorPosition(target.selectionStart ?? 0);
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}

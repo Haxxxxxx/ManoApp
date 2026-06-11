@@ -51,7 +51,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { getUserSongs, getSongs } from '../../services/firebaseService';
 import { createAlbum, getAlbum, updateAlbum } from '../../services/firebaseService';
 import type { AlbumSong } from '../../types/album';
-import { debounce } from 'lodash';
+import { debounce } from '../../utils/debounce';
 import { formatDuration, parseDurationToSeconds } from '../../utils/formatters';
 import { STORAGE_KEYS, storageHelpers } from '../../utils/storageHelpers';
 import { validateTitle, validateArtist, validateGenre, validateDescription } from '../../utils/validation';

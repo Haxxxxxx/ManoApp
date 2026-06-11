@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 /**
  * SoundCloud Connector Tests
  */
@@ -6,11 +7,11 @@ import { SoundCloudConnector } from '../soundcloudConnector';
 import { ReleaseManifest, RightsSplit } from '../../../../types/export';
 
 // Mock Firebase Functions
-jest.mock('firebase/functions', () => ({
-  httpsCallable: jest.fn(),
+vi.mock('firebase/functions', () => ({
+  httpsCallable: vi.fn(),
 }));
 
-jest.mock('../../../../firebase/config', () => ({
+vi.mock('../../../../firebase/config', () => ({
   functions: {
     // Mock functions object
   },
@@ -21,7 +22,7 @@ describe('SoundCloudConnector', () => {
 
   beforeEach(() => {
     connector = new SoundCloudConnector();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('properties', () => {
@@ -199,16 +200,16 @@ describe('SoundCloudConnector', () => {
 
   describe('authorize', () => {
     it('should return redirect URL if not authorized', async () => {
-      const mockCallable = jest.fn().mockResolvedValue({
+      const mockCallable = vi.fn().mockResolvedValue({
         data: { hasToken: false },
       });
 
-      const mockOAuthCallable = jest.fn().mockResolvedValue({
+      const mockOAuthCallable = vi.fn().mockResolvedValue({
         data: { redirectUrl: 'https://soundcloud.com/oauth' },
       });
 
-      const { httpsCallable } = require('firebase/functions');
-      httpsCallable
+      const { httpsCallable } = await import('firebase/functions');
+      vi.mocked(httpsCallable)
         .mockReturnValueOnce(mockCallable)
         .mockReturnValueOnce(mockOAuthCallable);
 
@@ -218,12 +219,12 @@ describe('SoundCloudConnector', () => {
     });
 
     it('should return authorized if token exists', async () => {
-      const mockCallable = jest.fn().mockResolvedValue({
+      const mockCallable = vi.fn().mockResolvedValue({
         data: { hasToken: true },
       });
 
-      const { httpsCallable } = require('firebase/functions');
-      httpsCallable.mockReturnValue(mockCallable);
+      const { httpsCallable } = await import('firebase/functions');
+      vi.mocked(httpsCallable).mockReturnValue(mockCallable);
 
       const result = await connector.authorize('user-1');
 

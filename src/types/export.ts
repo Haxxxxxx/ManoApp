@@ -217,7 +217,7 @@ export interface ProviderConnector {
 /**
  * Supported platform identifiers
  */
-export type PlatformId = 'soundcloud' | 'spotify' | 'apple' | 'amazon' | 'youtube' | 'revelator';
+export type PlatformId = 'soundcloud' | 'revelator';
 
 /**
  * Platform configuration

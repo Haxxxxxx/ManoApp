@@ -71,7 +71,7 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
   manifest,
   providers = [
     { id: 'soundcloud', name: 'SoundCloud', enabled: true },
-    { id: 'spotify', name: 'Spotify', enabled: false },
+    { id: 'revelator', name: 'Revelator (All DSPs)', enabled: true },
   ],
   preflightResult,
   onRunPreflight,
@@ -116,11 +116,9 @@ const ExportPanel: React.FC<ExportPanelProps> = ({
     }
   };
 
-  const applyPreset = (preset: ExportPreset) => {
-    // Apply preset settings to manifest
-    // This would update the manifest with preset settings
-    // Implementation depends on how manifest is managed
-    console.log('Applying preset:', preset);
+  const applyPreset = (_preset: ExportPreset) => {
+    // Preset → manifest application is not implemented yet; selecting a
+    // preset only records the choice. See exportPresets feature flag.
   };
 
   const handlePresetChange = (presetId: string) => {

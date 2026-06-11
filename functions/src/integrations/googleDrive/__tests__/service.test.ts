@@ -1,10 +1,19 @@
+// @vitest-environment node
 /**
  * Google Drive Service Tests
- * 
+ *
  * Unit tests for Drive API service functions
  */
 
-import { computeHash, validateMimeType } from '../service';
+import * as admin from 'firebase-admin';
+
+// ../service imports ../auth, which calls admin.firestore() at module
+// scope — an app must exist before that import is evaluated, so the
+// service must be imported dynamically after initializeApp.
+if (admin.apps.length === 0) {
+  admin.initializeApp({ projectId: 'demo-test' });
+}
+const { computeHash, validateMimeType } = await import('../service');
 
 describe('Google Drive Service', () => {
   describe('computeHash', () => {

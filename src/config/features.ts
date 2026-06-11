@@ -73,7 +73,9 @@ export interface FeatureFlags {
  * Default feature flags - all features disabled by default
  */
 export const featureFlags: FeatureFlags = {
-  aiMetadata: true,
+  // OFF: the aiMetadata Cloud Function is still a Math.random() mock —
+  // do not re-enable until a real model is wired in (functions/src/aiMetadata.ts)
+  aiMetadata: false,
   stemsAndMixer: false,
   releaseChecklist: true,
   comments: true,
