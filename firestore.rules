@@ -10,14 +10,6 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    
-    function isCollaborator(collaborators) {
-      return isAuthenticated() && collaborators is list && request.auth.uid in collaborators;
-    }
-
-    function hasAccess(userId, collaborators) {
-      return isOwner(userId) || isCollaborator(collaborators);
-    }
 
     // Users collection
     // Any authenticated user can read (needed for collaborator display names/avatars)
@@ -48,10 +40,12 @@ service cloud.firestore {
          request.auth.uid in request.query.filters['collaborators'])
       );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && (
+      allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         (resource.data.collaborators is list && request.auth.uid in resource.data.collaborators)
       );
+      // Only the owner can delete a project — collaborators can edit, not destroy
+      allow delete: if isOwner(resource.data.userId);
 
       // Trip logs subcollection
       match /logs/{logId} {
@@ -132,7 +126,7 @@ service cloud.firestore {
         )
       );
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && (
+      allow update: if isAuthenticated() && (
         resource.data.userId == request.auth.uid ||
         exists(/databases/$(database)/documents/trips/$(resource.data.projectId)) &&
         (
@@ -140,6 +134,16 @@ service cloud.firestore {
           request.auth.uid in get(/databases/$(database)/documents/trips/$(resource.data.projectId)).data.collaborators
         )
       );
+      // Only the owner can delete a release — deleting mid-distribution would
+      // orphan provider submission state
+      allow delete: if isOwner(resource.data.userId);
+
+      // Provider submissions subcollection — server-only (Admin SDK bypasses
+      // rules). Clients read via the getReleaseSubmissions callable; direct
+      // writes would let a client fake a 'completed' distribution.
+      match /submissions/{providerId} {
+        allow read, write: if false;
+      }
     }
 
     // Comments collection

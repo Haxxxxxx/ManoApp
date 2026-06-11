@@ -17,7 +17,8 @@ const AuthForm = () => {
   const [password, setPassword] = useState('');
   const { login, signup, loading, devBypass } = useAuth();
   const [error, setError] = useState<Error | null>(null);
-  const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
+  // Dev-server builds only — keep in sync with the guard inside devBypass()
+  const isDev = import.meta.env.DEV;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
