@@ -361,6 +361,11 @@ const DashboardView: React.FC = () => {
       showError('Cannot delete dev placeholder project');
       return;
     }
+    // Firestore rules only allow the owner to delete a project
+    if (trip.userId !== user?.uid) {
+      showError('Only the project owner can delete it');
+      return;
+    }
     setTripToDelete(trip);
     setDeleteConfirmOpen(true);
   };
@@ -372,16 +377,13 @@ const DashboardView: React.FC = () => {
     setError(null);
     
     try {
-      // Check if user has permission to delete (owner or collaborator)
-      const isOwner = tripToDelete.userId === user.uid;
-      const isCollaborator = tripToDelete.collaborators?.includes(user.uid);
-      
-      if (!isOwner && !isCollaborator) {
-        throw new Error('You do not have permission to delete this project');
+      // Firestore rules enforce owner-only delete; mirror that here
+      if (tripToDelete.userId !== user.uid) {
+        throw new Error('Only the project owner can delete it');
       }
-      
+
       // Delete from Firebase
-        await deleteTrip(tripToDelete.id);
+      await deleteTrip(tripToDelete.id);
       
       // Remove from context
       removeTrip(tripToDelete.id);

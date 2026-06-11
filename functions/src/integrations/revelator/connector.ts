@@ -209,11 +209,52 @@ export class RevelatorConnector implements ProviderConnector {
     return { data: payload as unknown as Record<string, unknown> };
   }
 
+  /**
+   * Submit with retry checkpointing: Cloud Tasks redelivers the job on
+   * failure (up to 5 attempts), so each provider side effect is persisted
+   * to the submission doc the moment it succeeds and skipped on subsequent
+   * attempts. Without this, a transient failure after distributeRelease
+   * would trigger duplicate DSP deliveries on retry.
+   */
   async submit(payload: SubmissionPayload): Promise<SubmissionResult> {
     const releasePayload = payload.data as unknown as RevelatorReleasePayload;
 
-    const release = await this.client.createRelease(releasePayload);
-    const distribution = await this.client.distributeRelease(release.releaseId);
+    // externalId is the ManoApp releaseId (set in prepare())
+    const checkpointRef = admin
+      .firestore()
+      .collection('releases')
+      .doc(releasePayload.externalId)
+      .collection('submissions')
+      .doc(this.id);
+
+    const checkpoint = (await checkpointRef.get()).data() ?? {};
+    const checkpointData = (checkpoint.providerData ?? {}) as Record<string, unknown>;
+
+    // Distribution already triggered by a prior attempt — never re-distribute;
+    // report the provider's current status instead
+    const existingDistributionId = checkpoint.submissionId as string | undefined;
+    if (existingDistributionId) {
+      logger.info(
+        `Revelator distribution ${existingDistributionId} already triggered for ${releasePayload.externalId}; refreshing status instead of re-submitting`
+      );
+      return this.getSubmissionStatus(existingDistributionId);
+    }
+
+    let revelatorReleaseId = checkpointData.revelatorReleaseId as string | undefined;
+    if (!revelatorReleaseId) {
+      const release = await this.client.createRelease(releasePayload);
+      revelatorReleaseId = release.releaseId;
+      await checkpointRef.set(
+        { providerData: { revelatorReleaseId, mode: this.client.mode } },
+        { merge: true }
+      );
+    }
+
+    const distribution = await this.client.distributeRelease(revelatorReleaseId);
+    await checkpointRef.set(
+      { submissionId: distribution.distributionId },
+      { merge: true }
+    );
 
     return {
       submissionId: distribution.distributionId,
@@ -221,7 +262,7 @@ export class RevelatorConnector implements ProviderConnector {
       error: distribution.error,
       providerUrl: distribution.dashboardUrl,
       providerData: {
-        revelatorReleaseId: release.releaseId,
+        revelatorReleaseId,
         mode: this.client.mode,
       },
       submittedAt: new Date().toISOString(),

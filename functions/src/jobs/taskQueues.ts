@@ -5,9 +5,11 @@
  * onTaskDispatched export here must be registered in
  * TASK_FUNCTION_BY_JOB (lib/queue.ts) under its job name.
  *
- * A thrown handler error triggers a Cloud Tasks retry with backoff; the
- * handler is idempotent-enough for that (updateSubmissionStatus overwrites,
- * and Revelator createRelease upserts by externalId).
+ * A thrown handler error triggers a Cloud Tasks retry with backoff. Retries
+ * are safe because every provider side effect is checkpointed: the job skips
+ * already-completed submissions, and RevelatorConnector.submit() persists
+ * revelatorReleaseId/distributionId to the submission doc as each step
+ * succeeds, never re-creating or re-distributing past a checkpoint.
  */
 
 import { onTaskDispatched } from 'firebase-functions/v2/tasks';
