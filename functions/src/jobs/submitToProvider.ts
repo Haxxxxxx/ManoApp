@@ -5,6 +5,7 @@
  */
 
 import { logger } from 'firebase-functions';
+import * as admin from 'firebase-admin';
 import { ReleaseManifest, SubmissionPayload, SubmissionResult } from '../types/export';
 import { getProviderRegistry } from '../services/providerRegistry';
 import { updateSubmissionStatus } from '../services/orchestrator';
@@ -22,6 +23,22 @@ export async function processSubmitToProvider(data: JobData): Promise<void> {
   };
 
   logger.info(`Processing submission job for release ${releaseId} to provider ${providerId}`);
+
+  // Retry guard: Cloud Tasks redelivers on failure — a submission that
+  // already reached a terminal success state must not be re-submitted
+  const existingDoc = await admin
+    .firestore()
+    .collection('releases')
+    .doc(releaseId)
+    .collection('submissions')
+    .doc(providerId)
+    .get();
+  if (existingDoc.data()?.status === 'completed') {
+    logger.info(
+      `Submission for release ${releaseId} to ${providerId} already completed; skipping retry`
+    );
+    return;
+  }
 
   try {
     // Update status to processing

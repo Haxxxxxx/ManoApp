@@ -54,7 +54,10 @@ export { generateSplitSheet } from './api/splits/generate';
 // Export admin feature flag functions
 export { setFeatureFlag, getFeatureFlags } from './api/admin/featureFlags';
 
-// Register job processors
+// Export Cloud Tasks queue functions (used when QUEUE_MODE=cloud-tasks)
+export { submitToProviderTask } from './jobs/taskQueues';
+
+// Register inline job processors (default QUEUE_MODE)
 import { processJob } from './lib/queue';
 import { processSubmitToProvider } from './jobs/submitToProvider';
 

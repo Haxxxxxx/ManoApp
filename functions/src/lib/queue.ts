@@ -1,16 +1,23 @@
 /**
  * Queue Interface
- * 
- * Mock queue implementation with BullMQ skeleton for production use.
- * 
- * TODO: Replace mock implementation with BullMQ for production:
- * 1. Install bullmq: npm install bullmq
- * 2. Set BULLMQ_REDIS_URL environment variable
- * 3. Uncomment BullMQ implementation below
- * 4. Remove mock implementation
+ *
+ * Two backends, selected by the QUEUE_MODE env var:
+ *
+ * - 'inline' (default): jobs run synchronously inside the enqueueing
+ *   invocation. Cloud Functions throttles CPU after the response is sent,
+ *   so fire-and-forget background work would be silently killed — awaiting
+ *   the job within the request lifecycle is the only safe in-process option.
+ *   No retries; a thrown handler error surfaces to the caller's logs and the
+ *   submission is marked failed by the handler itself.
+ *
+ * - 'cloud-tasks': jobs are dispatched to the Cloud Tasks queue backing the
+ *   matching onTaskDispatched function (see jobs/taskQueues.ts). Durable,
+ *   with retry/backoff handled by Cloud Tasks. Requires the task functions
+ *   to be deployed and the Cloud Tasks API enabled on the project.
  */
 
 import { logger } from 'firebase-functions';
+import { getFunctions } from 'firebase-admin/functions';
 
 /**
  * Job data interface
@@ -25,27 +32,27 @@ export interface JobData {
 export type JobHandler = (data: JobData) => Promise<void>;
 
 /**
- * Mock queue implementation
- * 
- * This is a simple in-memory queue for development/testing.
- * In production, replace with BullMQ.
+ * Maps queue job names to the deployed onTaskDispatched function that
+ * processes them. Keep in sync with jobs/taskQueues.ts exports in index.ts.
  */
-class MockQueue {
-  private jobs: Array<{ name: string; data: JobData; handler?: JobHandler }> = [];
+const TASK_FUNCTION_BY_JOB: Record<string, string> = {
+  submitToProvider: 'submitToProviderTask',
+};
+
+/**
+ * Inline queue implementation (default)
+ */
+class InlineQueue {
+  private jobs: Array<{ name: string; data: JobData }> = [];
   private processors: Map<string, JobHandler> = new Map();
   private processing = false;
 
   /**
-   * Enqueue a job
-   *
-   * Processing is awaited inline: Cloud Functions throttles CPU after the
-   * response is sent, so fire-and-forget background work would be silently
-   * killed and the in-memory job lost. Completing the job within the request
-   * lifecycle is the only safe option until a durable queue (Cloud Tasks /
-   * BullMQ) replaces this mock.
+   * Enqueue a job and process it before returning — see module docblock for
+   * why processing must complete within the request lifecycle.
    */
   async enqueue(jobName: string, data: JobData): Promise<void> {
-    logger.info(`Enqueuing job: ${jobName}`, { data: this.sanitizeData(data) });
+    logger.info(`Enqueuing job: ${jobName}`, { data: sanitizeData(data) });
     this.jobs.push({ name: jobName, data });
 
     if (!this.processing) {
@@ -83,7 +90,8 @@ class MockQueue {
           logger.info(`Job completed: ${job.name}`);
         } catch (error) {
           logger.error(`Job failed: ${job.name}`, error);
-          // In production, you'd want to retry failed jobs
+          // Inline mode has no retries — the handler is responsible for
+          // persisting failure state (e.g. submission status = 'failed')
         }
       } else {
         logger.warn(`No processor registered for job: ${job.name}`);
@@ -92,120 +100,55 @@ class MockQueue {
 
     this.processing = false;
   }
-
-  /**
-   * Sanitize data for logging (remove sensitive information)
-   */
-  private sanitizeData(data: JobData): JobData {
-    const sanitized: JobData = { ...data };
-    // Remove sensitive fields
-    if ('manifest' in sanitized) {
-      sanitized.manifest = '[REDACTED]';
-    }
-    if ('userId' in sanitized) {
-      sanitized.userId = '[REDACTED]';
-    }
-    return sanitized;
-  }
 }
 
-// Mock queue instance
-const mockQueue = new MockQueue();
+const inlineQueue = new InlineQueue();
+
+function useCloudTasks(): boolean {
+  return process.env.QUEUE_MODE === 'cloud-tasks';
+}
 
 /**
- * Enqueue a job (mock implementation — processed inline, see MockQueue.enqueue)
- *
- * TODO: Replace with BullMQ implementation
+ * Enqueue a job on the configured backend
  */
 export async function enqueueJob(jobName: string, data: JobData): Promise<void> {
+  if (useCloudTasks()) {
+    const taskFunction = TASK_FUNCTION_BY_JOB[jobName];
+    if (!taskFunction) {
+      throw new Error(`No task function mapped for job: ${jobName}`);
+    }
+    await getFunctions().taskQueue(taskFunction).enqueue(data);
+    logger.info(`Dispatched job to Cloud Tasks: ${jobName} -> ${taskFunction}`, {
+      data: sanitizeData(data),
+    });
+    return;
+  }
+
   logger.warn(
-    'Using in-memory mock queue: job runs inline within this invocation. ' +
-    'For production-scale async processing, migrate to BullMQ/Cloud Tasks.'
+    'QUEUE_MODE is not "cloud-tasks": job runs inline within this invocation. ' +
+    'Set QUEUE_MODE=cloud-tasks in production for durable, retried processing.'
   );
-  await mockQueue.enqueue(jobName, data);
+  await inlineQueue.enqueue(jobName, data);
 }
 
 /**
- * Register a job processor (mock implementation)
- * 
- * TODO: Replace with BullMQ implementation
+ * Register a job processor (inline mode only — in cloud-tasks mode the
+ * onTaskDispatched functions in jobs/taskQueues.ts are the processors)
  */
 export function processJob(jobName: string, handler: JobHandler): void {
-  mockQueue.process(jobName, handler);
+  inlineQueue.process(jobName, handler);
 }
 
-/* 
- * ============================================================================
- * BULLMQ IMPLEMENTATION (for production)
- * ============================================================================
- * 
- * Uncomment and use this implementation when ready for production:
- * 
- * import { Queue, Worker, Job } from 'bullmq';
- * import { logger } from 'firebase-functions';
- * 
- * const redisUrl = process.env.BULLMQ_REDIS_URL;
- * if (!redisUrl) {
- *   throw new Error('BULLMQ_REDIS_URL environment variable is required');
- * }
- * 
- * const connection = {
- *   host: new URL(redisUrl).hostname,
- *   port: parseInt(new URL(redisUrl).port || '6379'),
- *   password: new URL(redisUrl).password,
- * };
- * 
- * const queues: Map<string, Queue> = new Map();
- * const workers: Map<string, Worker> = new Map();
- * 
- * function getQueue(name: string): Queue {
- *   if (!queues.has(name)) {
- *     const queue = new Queue(name, { connection });
- *     queues.set(name, queue);
- *   }
- *   return queues.get(name)!;
- * }
- * 
- * export async function enqueueJob(jobName: string, data: JobData): Promise<void> {
- *   const queue = getQueue(jobName);
- *   await queue.add(jobName, data);
- *   logger.info(`Enqueued job: ${jobName}`, { data: sanitizeData(data) });
- * }
- * 
- * export function processJob(jobName: string, handler: JobHandler): void {
- *   if (workers.has(jobName)) {
- *     logger.warn(`Worker for ${jobName} already exists`);
- *     return;
- *   }
- * 
- *   const worker = new Worker(
- *     jobName,
- *     async (job: Job) => {
- *       logger.info(`Processing job: ${jobName}`, { jobId: job.id });
- *       try {
- *         await handler(job.data);
- *         logger.info(`Job completed: ${jobName}`, { jobId: job.id });
- *       } catch (error) {
- *         logger.error(`Job failed: ${jobName}`, { jobId: job.id, error });
- *         throw error; // BullMQ will handle retries
- *       }
- *     },
- *     { connection }
- *   );
- * 
- *   workers.set(jobName, worker);
- *   logger.info(`Registered worker for job: ${jobName}`);
- * }
- * 
- * function sanitizeData(data: JobData): JobData {
- *   const sanitized: JobData = { ...data };
- *   if ('manifest' in sanitized) {
- *     sanitized.manifest = '[REDACTED]';
- *   }
- *   if ('userId' in sanitized) {
- *     sanitized.userId = '[REDACTED]';
- *   }
- *   return sanitized;
- * }
+/**
+ * Sanitize data for logging (remove sensitive information)
  */
-
+function sanitizeData(data: JobData): JobData {
+  const sanitized: JobData = { ...data };
+  if ('manifest' in sanitized) {
+    sanitized.manifest = '[REDACTED]';
+  }
+  if ('userId' in sanitized) {
+    sanitized.userId = '[REDACTED]';
+  }
+  return sanitized;
+}

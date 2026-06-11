@@ -206,9 +206,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Dev bypass function - uses Firebase anonymous authentication for development
   const devBypass = async () => {
     try {
-      // Check if we're in development mode
-      const isDev = import.meta.env.DEV || window.location.hostname === 'localhost';
-      if (!isDev) {
+      // Dev-server builds only — a production bundle previewed on localhost
+      // must NOT expose the anonymous-auth bypass
+      if (!import.meta.env.DEV) {
         return;
       }
 
