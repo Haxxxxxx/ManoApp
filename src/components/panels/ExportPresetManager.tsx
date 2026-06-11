@@ -170,7 +170,7 @@ export const ExportPresetManager: React.FC<ExportPresetManagerProps> = ({
           {filteredPresets.map((preset) => (
             <ListItem
               key={preset.id}
-              component={onSelectPreset ? 'div' : undefined}
+              component="div"
               onClick={onSelectPreset ? () => onSelectPreset(preset) : undefined}
               sx={{ cursor: onSelectPreset ? 'pointer' : 'default' }}
             >

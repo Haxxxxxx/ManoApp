@@ -1,5 +1,6 @@
 import { db } from '../firebase/config';
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
+import type { UpdateData, DocumentData } from 'firebase/firestore';
 import { Trip } from '../types/trip';
 import { Song } from '../types/song';
 import { auth } from '../firebase/config';
@@ -853,12 +854,13 @@ export const updateUserProfile = async (userId: string, data: Partial<ArtistProf
       return acc;
     }, {} as Record<string, unknown>);
     
-    // Prepare update data
-    const updateData: Record<string, unknown> = {
+    // Prepare update data — UpdateData is the Firestore SDK's own shape for
+    // updateDoc payloads (plain values plus FieldValue sentinels)
+    const updateData: UpdateData<DocumentData> = {
       ...cleanData,
-      updatedAt: serverTimestamp() as unknown as Date
+      updatedAt: serverTimestamp()
     };
-    
+
     // Check if artist document exists
     const artistDoc = await getDoc(artistRef);
     if (artistDoc.exists()) {

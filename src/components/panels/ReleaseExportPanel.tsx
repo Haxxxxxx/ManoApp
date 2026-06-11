@@ -8,7 +8,6 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import ExportPanel from '../ExportPanel';
 import { ReleaseManifest, PreflightResult, SubmissionResult } from '../../types/export';
-import type { PlatformConfig } from '../../types/export';
 import { Release } from '../../types/release';
 import { Song } from '../../types/song';
 import { SoundCloudConnector } from '../../services/export/connectors/soundcloudConnector';

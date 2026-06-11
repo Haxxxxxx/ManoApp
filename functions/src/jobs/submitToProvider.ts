@@ -5,7 +5,7 @@
  */
 
 import { logger } from 'firebase-functions';
-import { ReleaseManifest, SubmissionPayload, SubmissionResult } from '../../../src/types/export';
+import { ReleaseManifest, SubmissionPayload, SubmissionResult } from '../types/export';
 import { getProviderRegistry } from '../services/providerRegistry';
 import { updateSubmissionStatus } from '../services/orchestrator';
 import { JobData } from '../lib/queue';
@@ -14,7 +14,7 @@ import { JobData } from '../lib/queue';
  * Process a submitToProvider job
  */
 export async function processSubmitToProvider(data: JobData): Promise<void> {
-  const { releaseId, providerId, manifest, userId } = data as {
+  const { releaseId, providerId, manifest } = data as {
     releaseId: string;
     providerId: string;
     manifest: ReleaseManifest;

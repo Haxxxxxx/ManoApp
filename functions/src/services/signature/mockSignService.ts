@@ -8,7 +8,7 @@
 
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import { Signature, SignatureStatus } from '../../../../src/types/splitSheet';
+import { Signature, SignatureStatus } from '../../types/splitSheet';
 
 const db = admin.firestore();
 

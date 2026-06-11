@@ -162,7 +162,7 @@ export const reorderStems = async (songId: string, stemIds: string[]): Promise<S
 
     // Reorder stems based on provided order
     const reorderedStems = stemIds
-      .map((id, index) => {
+      .map((id, index): Stem | null => {
         const stem = existingStems.find(s => s.id === id);
         return stem ? { ...stem, order: index } : null;
       })

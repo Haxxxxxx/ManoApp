@@ -5,7 +5,7 @@
  */
 
 import { logger } from 'firebase-functions';
-import { ProviderConnector } from '../../../src/types/export';
+import { ProviderConnector } from '../types/export';
 import { RevelatorConnector } from '../integrations/revelator/connector';
 
 /**

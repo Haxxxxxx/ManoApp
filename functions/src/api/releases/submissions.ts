@@ -8,7 +8,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { getSubmissions, updateSubmissionStatus } from '../../services/orchestrator';
 import { getProviderRegistry } from '../../services/providerRegistry';
-import { ProviderSubmission } from '../../../src/types/submissions';
+import { ProviderSubmission } from '../../types/submissions';
 import * as admin from 'firebase-admin';
 
 const db = admin.firestore();

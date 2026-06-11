@@ -7,9 +7,8 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { generateCSV, generatePDF } from '../../services/rights/splitSheetService';
-import { SplitSheetFormat } from '../../../../src/types/splitSheet';
 import * as admin from 'firebase-admin';
-import { ReleaseManifest } from '../../../../src/types/export';
+import { ReleaseManifest } from '../../types/export';
 
 const db = admin.firestore();
 

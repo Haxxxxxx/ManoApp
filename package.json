@@ -6,9 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:ignore-errors": "tsc -b tsconfig.build.json && vite build --config vite.config.build.ts",
-    "fix-ts-errors": "node scripts/fix-ts-errors.js",
-    "build:fix-errors": "npm run fix-ts-errors && npm run build:ignore-errors",
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "npm run build && firebase deploy --only hosting",

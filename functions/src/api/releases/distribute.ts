@@ -7,7 +7,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { distributeRelease } from '../../services/orchestrator';
-import { ProviderSubmission } from '../../../src/types/submissions';
 
 /**
  * Distribute a release to multiple providers

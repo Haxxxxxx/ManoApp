@@ -5,8 +5,8 @@
  */
 
 import { logger } from 'firebase-functions';
-import { RightsSplit } from '../../../../src/types/export';
-import { ReleaseManifest } from '../../../../src/types/export';
+import { RightsSplit } from '../../types/export';
+import { ReleaseManifest } from '../../types/export';
 
 /**
  * Generate CSV split-sheet
