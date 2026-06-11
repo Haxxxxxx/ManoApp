@@ -8,7 +8,6 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { computeFileIdentifiers } from '../../services/fingerprint/fingerprintService';
 import { getStorage } from 'firebase-admin/storage';
-import * as admin from 'firebase-admin';
 
 const storage = getStorage();
 
@@ -30,7 +29,7 @@ export const computeAssetFingerprint = onCall(
         throw new HttpsError('unauthenticated', 'User must be authenticated');
       }
 
-      const userId = request.auth.uid;
+      // Authenticated user available via request.auth.uid if needed
       const { filePath, fileData } = request.data;
 
       // Validate input

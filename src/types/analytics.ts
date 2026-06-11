@@ -3,6 +3,8 @@
  * Types for streaming analytics, revenue tracking, and dashboard data
  */
 
+import type { ActivityItem } from './activity';
+
 export interface StreamingStats {
   id: string;
   userId: string;
@@ -47,3 +49,19 @@ export interface DateRange {
 }
 
 export type DateRangePreset = '7d' | '30d' | '90d' | '1yr' | 'custom';
+
+/**
+ * Aggregate stats shown in the dashboard analytics dialog.
+ * Shared by DashboardView (producer) and DashboardDialogs (consumer).
+ */
+export interface DashboardAnalyticsData {
+  totalSongs: number;
+  totalProjects: number;
+  /** Not populated by getAnalytics — only set by the dashboard's local state */
+  recentActivity?: ActivityItem[];
+  totalPlaylists: number;
+  totalCollaborators: number;
+  projectsByMonth: { [key: string]: number };
+  songsByGenre: { [key: string]: number };
+  topCollaborators: { userId: string; count: number }[];
+}

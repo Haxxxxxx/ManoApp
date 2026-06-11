@@ -63,10 +63,10 @@ export async function listFiles(
     id: file.id!,
     name: file.name!,
     mimeType: file.mimeType || 'application/octet-stream',
-    size: file.size,
-    modifiedTime: file.modifiedTime,
-    webViewLink: file.webViewLink,
-    thumbnailLink: file.thumbnailLink,
+    size: file.size ?? undefined,
+    modifiedTime: file.modifiedTime ?? undefined,
+    webViewLink: file.webViewLink ?? undefined,
+    thumbnailLink: file.thumbnailLink ?? undefined,
   }));
 
   return {
@@ -95,10 +95,10 @@ export async function getFileMetadata(
     id: file.id!,
     name: file.name!,
     mimeType: file.mimeType || 'application/octet-stream',
-    size: file.size,
-    modifiedTime: file.modifiedTime,
-    webViewLink: file.webViewLink,
-    thumbnailLink: file.thumbnailLink,
+    size: file.size ?? undefined,
+    modifiedTime: file.modifiedTime ?? undefined,
+    webViewLink: file.webViewLink ?? undefined,
+    thumbnailLink: file.thumbnailLink ?? undefined,
   };
 }
 

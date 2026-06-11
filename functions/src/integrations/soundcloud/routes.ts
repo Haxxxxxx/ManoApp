@@ -16,7 +16,7 @@ import {
   hasValidToken,
   getStoredTokens,
 } from './auth';
-import { SubmissionPayload, SubmissionResult } from '../../../src/types/export';
+import { SubmissionPayload, SubmissionResult } from '../../types/export';
 
 // Initialize Firebase Admin if not already initialized
 if (!admin.apps.length) {

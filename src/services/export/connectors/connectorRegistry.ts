@@ -1,14 +1,16 @@
 /**
  * Connector Registry
  * Central registry mapping PlatformId to connector factories
+ *
+ * Only real connectors are registered: SoundCloud (per-user OAuth direct
+ * upload) and Revelator (white-label distribution to all DSPs — Spotify,
+ * Apple Music, Amazon, YouTube Music etc. are reached through it, not
+ * through per-store stub connectors).
  */
 
 import { PlatformId, PlatformConfig, ProviderConnector } from '../../../types/export';
 import { SoundCloudConnector } from './soundcloudConnector';
-import { SpotifyConnector } from './spotifyConnector';
-import { AppleConnector } from './appleConnector';
-import { AmazonConnector } from './amazonConnector';
-import { YouTubeConnector } from './youtubeConnector';
+import { RevelatorConnector } from './revelatorConnector';
 
 export const PLATFORM_CONFIGS: Record<PlatformId, PlatformConfig> = {
   soundcloud: {
@@ -21,51 +23,20 @@ export const PLATFORM_CONFIGS: Record<PlatformId, PlatformConfig> = {
     maxTitleLength: 255,
     maxDescriptionLength: 5000,
   },
-  spotify: {
-    id: 'spotify',
-    name: 'Spotify',
-    icon: 'spotify',
+  revelator: {
+    id: 'revelator',
+    name: 'Revelator (All DSPs)',
+    icon: 'revelator',
     audioFormat: 'wav',
-    requiresAuth: true,
-    exportOnly: true,
-    maxTitleLength: 200,
-  },
-  apple: {
-    id: 'apple',
-    name: 'Apple Music',
-    icon: 'apple',
-    audioFormat: 'aiff',
-    requiresAuth: true,
-    exportOnly: true,
+    requiresAuth: false,
+    exportOnly: false,
     maxTitleLength: 255,
-  },
-  amazon: {
-    id: 'amazon',
-    name: 'Amazon Music',
-    icon: 'amazon',
-    audioFormat: 'flac',
-    requiresAuth: true,
-    exportOnly: true,
-    maxTitleLength: 200,
-  },
-  youtube: {
-    id: 'youtube',
-    name: 'YouTube Music',
-    icon: 'youtube',
-    audioFormat: 'mp3',
-    requiresAuth: true,
-    exportOnly: true,
-    maxTitleLength: 100,
-    maxDescriptionLength: 5000,
   },
 };
 
 const connectorFactories: Record<PlatformId, () => ProviderConnector> = {
   soundcloud: () => new SoundCloudConnector(),
-  spotify: () => new SpotifyConnector(),
-  apple: () => new AppleConnector(),
-  amazon: () => new AmazonConnector(),
-  youtube: () => new YouTubeConnector(),
+  revelator: () => new RevelatorConnector(),
 };
 
 export function getConnector(platformId: PlatformId): ProviderConnector {

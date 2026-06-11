@@ -1,5 +1,6 @@
 import { db } from '../firebase/config';
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
+import type { UpdateData, DocumentData } from 'firebase/firestore';
 import { Trip } from '../types/trip';
 import { Song } from '../types/song';
 import { auth } from '../firebase/config';
@@ -10,6 +11,7 @@ import { ArtistProfile } from '../types/artist';
 import { Album } from '../types/album';
 import { ActivityItem } from '../types/activity';
 import { Release } from '../types/release';
+import type { DashboardAnalyticsData } from '../types/analytics';
 import { FILE_SIZE_LIMITS } from '../utils/constants';
 
 const tripsCollection = 'trips';
@@ -504,7 +506,7 @@ export const createPlaylist = async (playlistData: Omit<Trip, 'id'>): Promise<Tr
  * @param userId The user ID to get analytics for
  * @returns The analytics data
  */
-export const getAnalytics = async (userId: string): Promise<any> => {
+export const getAnalytics = async (userId: string): Promise<DashboardAnalyticsData> => {
   try {
     // Get all trips for the user
     const tripsRef = collection(db, 'trips');
@@ -853,12 +855,13 @@ export const updateUserProfile = async (userId: string, data: Partial<ArtistProf
       return acc;
     }, {} as Record<string, unknown>);
     
-    // Prepare update data
-    const updateData: Record<string, unknown> = {
+    // Prepare update data — UpdateData is the Firestore SDK's own shape for
+    // updateDoc payloads (plain values plus FieldValue sentinels)
+    const updateData: UpdateData<DocumentData> = {
       ...cleanData,
-      updatedAt: serverTimestamp() as unknown as Date
+      updatedAt: serverTimestamp()
     };
-    
+
     // Check if artist document exists
     const artistDoc = await getDoc(artistRef);
     if (artistDoc.exists()) {

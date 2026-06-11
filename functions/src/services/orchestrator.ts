@@ -7,8 +7,8 @@
 
 import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions';
-import { ReleaseManifest, PreflightResult, SubmissionResult } from '../../../src/types/export';
-import { ProviderSubmission, SubmissionStatus } from '../../../src/types/submissions';
+import { ReleaseManifest, PreflightResult } from '../types/export';
+import { ProviderSubmission, SubmissionStatus } from '../types/submissions';
 import { getProviderRegistry } from './providerRegistry';
 import { enqueueJob } from '../lib/queue';
 
@@ -86,7 +86,7 @@ export async function distributeRelease(
             filePath: song.filePath,
             userId: song.userId,
             metadata: song.metadata || {},
-          } as any,
+          },
           title: song.title,
           metadata: {
             isrc: song.metadata?.isrc,
@@ -105,8 +105,16 @@ export async function distributeRelease(
     description: releaseData.description,
     type: releaseData.type || 'single',
     releaseDate: releaseData.releaseDate,
+    genre: releaseData.genre,
+    tags: releaseData.tags,
+    artworkUrl: releaseData.artworkUrl || releaseData.coverUrl,
     tracks,
     rightsSplits: releaseData.rightsSplits || [],
+    metadata: {
+      upc: releaseData.upc,
+      label: releaseData.label,
+      primaryArtist: releaseData.artist,
+    },
   };
 
   // Run preflight validation
@@ -155,7 +163,6 @@ export async function distributeRelease(
  * Run preflight validation on a release manifest
  */
 export async function runPreflight(manifest: ReleaseManifest): Promise<PreflightResult> {
-  const registry = getProviderRegistry();
   const errors: Array<{ code: string; message: string; severity: 'error' | 'warning'; field?: string }> = [];
   const warnings: Array<{ code: string; message: string; severity: 'error' | 'warning'; field?: string }> = [];
 
@@ -310,7 +317,9 @@ export async function updateSubmissionStatus(
     ],
   };
 
-  await submissionRef.update(updatedSubmission);
+  // set() instead of update(): ProviderSubmission is a plain interface and
+  // the Admin SDK's update() signature demands an index signature
+  await submissionRef.set(updatedSubmission);
 }
 
 /**

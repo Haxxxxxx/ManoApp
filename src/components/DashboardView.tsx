@@ -37,24 +37,9 @@ import ShareIcon from '@mui/icons-material/Share';
 import CloudDownloadIcon_ctx from '@mui/icons-material/CloudDownload';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-
-interface ActivityItem {
-  id: string;
-  type: string;
-  description: string;
-  timestamp: Date;
-}
-
-interface AnalyticsData {
-  totalSongs: number;
-  totalProjects: number;
-  recentActivity: ActivityItem[];
-  totalPlaylists: number;
-  totalCollaborators: number;
-  projectsByMonth: { [key: string]: number };
-  songsByGenre: { [key: string]: number };
-  topCollaborators: { userId: string; count: number }[];
-}
+// Shared with DashboardDialogs — duplicate local declarations caused
+// "two different types with this name" assignability errors
+import type { DashboardAnalyticsData as AnalyticsData } from '../types/analytics';
 
 // Add type declarations for File System Access API
 declare global {
@@ -217,7 +202,7 @@ const DashboardView: React.FC = () => {
     setShowAnalyticsDialog(true);
     try {
       const data = await getAnalytics(user?.uid || '');
-      setAnalyticsData(data as AnalyticsData);
+      setAnalyticsData(data);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to fetch analytics'));
       setError('Failed to load analytics data');

@@ -1,8 +1,9 @@
+import { vi } from 'vitest';
 /**
  * Unit tests for useMentions hook
  */
 
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { useMentions } from '../useMentions';
 
 describe('useMentions', () => {
@@ -17,7 +18,7 @@ describe('useMentions', () => {
       useMentions({
         collaborators,
         value: 'Hey @john, check this out!',
-        onChange: jest.fn(),
+        onChange: vi.fn(),
       })
     );
 
@@ -29,7 +30,7 @@ describe('useMentions', () => {
       useMentions({
         collaborators,
         value: '@john and @jane are working on this',
-        onChange: jest.fn(),
+        onChange: vi.fn(),
       })
     );
 
@@ -37,13 +38,20 @@ describe('useMentions', () => {
   });
 
   it('should provide autocomplete options when in mention context', () => {
+    const value = 'Hey @j';
     const { result } = renderHook(() =>
       useMentions({
         collaborators,
-        value: 'Hey @j',
-        onChange: jest.fn(),
+        value,
+        onChange: vi.fn(),
       })
     );
+
+    // The consuming input reports the caret position — place it at the end,
+    // right after "@j"
+    act(() => {
+      result.current.setCursorPosition(value.length);
+    });
 
     expect(result.current.isInMentionContext).toBe(true);
     expect(result.current.autocompleteOptions.length).toBeGreaterThan(0);

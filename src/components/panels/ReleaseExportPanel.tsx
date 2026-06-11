@@ -8,15 +8,15 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Alert, CircularProgress } from '@mui/material';
 import ExportPanel from '../ExportPanel';
 import { ReleaseManifest, PreflightResult, SubmissionResult } from '../../types/export';
-import type { PlatformConfig } from '../../types/export';
 import { Release } from '../../types/release';
 import { Song } from '../../types/song';
 import { SoundCloudConnector } from '../../services/export/connectors/soundcloudConnector';
+import { RevelatorConnector } from '../../services/export/connectors/revelatorConnector';
 import { getAllPlatforms, getConnector } from '../../services/export/connectors/connectorRegistry';
 import { createSubmission } from '../../services/submissionService';
 import { isFeatureEnabled } from '../../config/features';
 import { useToast } from '../../hooks/useToast';
-import { distributeRelease, getSubmissions } from '../../services/orchestratorService';
+import { distributeRelease, refreshSubmissions } from '../../services/orchestratorService';
 
 interface ReleaseExportPanelProps {
   release: Release;
@@ -46,9 +46,20 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
   }, [release?.id]);
 
   useEffect(() => {
-    if (!isFeatureEnabled('soundcloud')) {
+    if (!isFeatureEnabled('soundcloud') && !isFeatureEnabled('distributor')) {
       return;
     }
+
+    // Release docs are schemaless beyond the Release type — pick up
+    // distribution fields when present so preflight can validate them
+    const releaseExtras = release as Release & {
+      genre?: string;
+      artworkUrl?: string;
+      coverUrl?: string;
+      upc?: string;
+      label?: string;
+      artist?: string;
+    };
 
     // Build release manifest from release and songs
     const releaseManifest: ReleaseManifest = {
@@ -57,6 +68,13 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
       description: release.description,
       type: release.type,
       releaseDate: release.releaseDate,
+      genre: releaseExtras.genre,
+      artworkUrl: releaseExtras.artworkUrl || releaseExtras.coverUrl,
+      metadata: {
+        upc: releaseExtras.upc,
+        label: releaseExtras.label,
+        primaryArtist: releaseExtras.artist,
+      },
       tracks: songs.map((song, index) => ({
         trackNumber: index + 1,
         songId: song.id,
@@ -75,19 +93,23 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
   }, [release, songs]);
 
   const handleRunPreflight = async (manifest: ReleaseManifest): Promise<PreflightResult> => {
-    if (!isFeatureEnabled('soundcloud')) {
-      const errorResult = { 
-        valid: false, 
-        errors: [{ code: 'FEATURE_DISABLED', message: 'SoundCloud export is not enabled', severity: 'error' as const }], 
-        warnings: [] 
+    if (!isFeatureEnabled('soundcloud') && !isFeatureEnabled('distributor')) {
+      const errorResult = {
+        valid: false,
+        errors: [{ code: 'FEATURE_DISABLED', message: 'Export features are not enabled', severity: 'error' as const }],
+        warnings: []
       };
       setPreflightResult(errorResult);
-      showError('SoundCloud export is not enabled');
+      showError('Export features are not enabled');
       return errorResult;
     }
 
     try {
-      const connector = new SoundCloudConnector();
+      // The distributor path delivers to DSP ingestion, so use the
+      // strictest preflight available
+      const connector = isFeatureEnabled('distributor')
+        ? new RevelatorConnector()
+        : new SoundCloudConnector();
       const result = await connector.runPreflight(manifest);
       setPreflightResult(result);
       
@@ -116,9 +138,11 @@ const ReleaseExportPanel: React.FC<ReleaseExportPanelProps> = ({
 
   const loadSubmissionHistory = async () => {
     if (!release?.id) return;
-    
+
     try {
-      const submissions = await getSubmissions(release.id);
+      // refreshSubmissions polls providers for in-flight statuses
+      // before returning, so the history reflects provider state
+      const submissions = await refreshSubmissions(release.id);
       const history = Object.entries(submissions).map(([providerId, submission]) => ({
         id: submission.submissionId || providerId,
         provider: submission.providerName || providerId,

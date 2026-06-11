@@ -1,3 +1,5 @@
+import { vi } from 'vitest';
+// @vitest-environment node
 /**
  * Google Drive Auth Tests
  * 
@@ -11,7 +13,7 @@ const originalEnv = process.env;
 
 describe('Google Drive Auth - Crypto', () => {
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env = { ...originalEnv };
     // Set a test encryption key
     process.env.ENCRYPTION_KEY = 'test-encryption-key-32-bytes-long!!';

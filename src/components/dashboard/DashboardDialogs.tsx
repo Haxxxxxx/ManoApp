@@ -32,18 +32,7 @@ import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import type { Trip } from '../../types/trip';
-import type { ActivityItem } from '../../types/activity';
-
-interface AnalyticsData {
-  totalSongs: number;
-  totalProjects: number;
-  recentActivity: ActivityItem[];
-  totalPlaylists: number;
-  totalCollaborators: number;
-  projectsByMonth: { [key: string]: number };
-  songsByGenre: { [key: string]: number };
-  topCollaborators: { userId: string; count: number }[];
-}
+import type { DashboardAnalyticsData as AnalyticsData } from '../../types/analytics';
 
 interface DashboardDialogsProps {
   showUploadDialog: boolean;

@@ -1,11 +1,12 @@
 import { Song } from '../types/index';
 import { removeFileExtension } from '../utils/formatters';
 
-// Add type declarations for File System Access API
+// lib.dom already ships FileSystemFileHandle (with readonly kind + getFile),
+// but the async-iteration methods of the File System Access API are still
+// missing — augment only what the lib lacks
 declare global {
-  interface FileSystemFileHandle extends FileSystemHandle {
-    kind: 'file';
-    getFile(): Promise<File>;
+  interface FileSystemDirectoryHandle {
+    values(): AsyncIterableIterator<FileSystemHandle>;
   }
 }
 

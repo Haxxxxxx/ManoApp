@@ -5,7 +5,8 @@
  */
 
 import { logger } from 'firebase-functions';
-import { ProviderConnector } from '../../../src/types/export';
+import { ProviderConnector } from '../types/export';
+import { RevelatorConnector } from '../integrations/revelator/connector';
 
 /**
  * Provider registry singleton
@@ -80,17 +81,13 @@ export function getProviderRegistry(): ProviderRegistry {
 
 /**
  * Initialize default providers
- * 
- * Note: In a real implementation, you would import and register actual connectors here.
- * For now, we'll register a mock SoundCloud connector placeholder.
  */
 function initializeDefaultProviders(): void {
-  // TODO: Import and register actual connectors
-  // Example:
-  // import { SoundCloudConnector } from '../../../src/services/export/connectors/soundcloudConnector';
-  // const registry = getProviderRegistry();
-  // registry.registerProvider('soundcloud', new SoundCloudConnector());
-  
-  logger.info('Provider registry initialized (no default providers registered yet)');
+  if (!registryInstance) return;
+
+  // Revelator white-label distribution (mock mode unless REVELATOR_MODE=live)
+  registryInstance.registerProvider('revelator', new RevelatorConnector());
+
+  logger.info('Provider registry initialized');
 }
 

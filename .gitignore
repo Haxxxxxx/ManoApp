@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Rodeo local project memory/index (machine-local)
+.rodeo/

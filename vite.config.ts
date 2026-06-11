@@ -8,6 +8,11 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     resolve: {
+      // Keep in sync with tsconfig paths — previously only the
+      // build:ignore-errors config had this alias
+      alias: {
+        '@': '/src',
+      },
       dedupe: [
         'firebase/app',
         'firebase/auth',

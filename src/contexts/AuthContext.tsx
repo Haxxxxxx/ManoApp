@@ -182,10 +182,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
     
-    // Add timestamp to the update data
-    const updateData: Partial<Omit<ArtistProfile, 'createdAt' | 'updatedAt' | 'id' | 'userId'>> & { updatedAt: ReturnType<typeof Timestamp.fromDate> } = {
+    // Add timestamp to the update data — pass a Date, the service converts
+    // Dates to Firestore Timestamps internally
+    const updateData: Partial<ArtistProfile> = {
       ...cleanData,
-      updatedAt: Timestamp.fromDate(new Date())
+      updatedAt: new Date()
     };
 
     // Update in database

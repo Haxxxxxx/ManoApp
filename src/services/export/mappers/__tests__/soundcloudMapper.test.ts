@@ -14,6 +14,7 @@ describe('SoundCloud Mapper', () => {
     id: 'song-1',
     title: 'Test Song',
     artist: 'Test Artist',
+    duration: '3:00',
     filePath: 'https://storage.example.com/song.mp3',
     userId: 'user-1',
     tripId: 'trip-1',

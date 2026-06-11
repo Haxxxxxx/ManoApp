@@ -37,14 +37,19 @@ class MockQueue {
 
   /**
    * Enqueue a job
+   *
+   * Processing is awaited inline: Cloud Functions throttles CPU after the
+   * response is sent, so fire-and-forget background work would be silently
+   * killed and the in-memory job lost. Completing the job within the request
+   * lifecycle is the only safe option until a durable queue (Cloud Tasks /
+   * BullMQ) replaces this mock.
    */
   async enqueue(jobName: string, data: JobData): Promise<void> {
     logger.info(`Enqueuing job: ${jobName}`, { data: this.sanitizeData(data) });
     this.jobs.push({ name: jobName, data });
-    
-    // Process jobs asynchronously
+
     if (!this.processing) {
-      this.processJobs();
+      await this.processJobs();
     }
   }
 
@@ -107,18 +112,16 @@ class MockQueue {
 // Mock queue instance
 const mockQueue = new MockQueue();
 
-// Warn that in-memory queue will lose jobs on restart
-logger.warn(
-  'Using in-memory mock queue. Jobs will be lost on process restart. ' +
-  'For production, migrate to BullMQ by setting BULLMQ_REDIS_URL environment variable.'
-);
-
 /**
- * Enqueue a job (mock implementation)
- * 
+ * Enqueue a job (mock implementation — processed inline, see MockQueue.enqueue)
+ *
  * TODO: Replace with BullMQ implementation
  */
 export async function enqueueJob(jobName: string, data: JobData): Promise<void> {
+  logger.warn(
+    'Using in-memory mock queue: job runs inline within this invocation. ' +
+    'For production-scale async processing, migrate to BullMQ/Cloud Tasks.'
+  );
   await mockQueue.enqueue(jobName, data);
 }
 

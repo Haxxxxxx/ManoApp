@@ -27,7 +27,10 @@ function buildShortcutEntries(): ShortcutEntry[] {
   const entries: ShortcutEntry[] = [];
   const seen = new Set<string>();
 
-  for (const [name, def] of Object.entries(COMMON_SHORTCUTS)) {
+  // COMMON_SHORTCUTS members are heterogeneous const objects — widen to the
+  // full shortcut shape so optional modifier keys can be probed
+  type ShortcutDef = { key: string; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; description?: string };
+  for (const [name, def] of Object.entries(COMMON_SHORTCUTS) as Array<[string, ShortcutDef]>) {
     // Skip SEARCH (duplicate of COMMAND_PALETTE)
     if (name === 'SEARCH') continue;
 

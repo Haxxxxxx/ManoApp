@@ -32,7 +32,7 @@ export {
 
 // Export orchestrator functions
 export { distributeReleaseToProviders } from './api/releases/distribute';
-export { getReleaseSubmissions } from './api/releases/submissions';
+export { getReleaseSubmissions, refreshReleaseSubmissions } from './api/releases/submissions';
 
 // Export fingerprinting functions
 export { computeAssetFingerprint } from './api/assets/fingerprint';

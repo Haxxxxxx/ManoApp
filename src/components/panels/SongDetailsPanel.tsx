@@ -112,7 +112,8 @@ const SongDetailsPanel: React.FC<SongDetailsPanelProps> = ({
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const [showGenreSuggestions, setShowGenreSuggestions] = useState(false);
   const [filteredGenres, setFilteredGenres] = useState<string[]>([]);
-  const [filteredTags, setFilteredTags] = useState<string[]>([]);
+  // Value currently unused — only the setter feeds the autocomplete refresh
+  const [, setFilteredTags] = useState<string[]>([]);
   const [_duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

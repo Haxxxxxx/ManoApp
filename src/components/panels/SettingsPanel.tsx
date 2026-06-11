@@ -45,6 +45,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { deleteAccount } from '../../services/firebaseService';
 import { useThemeSettings, ThemeSettings, defaultSettings } from '../../contexts/ThemeContext';
 import { ChromePicker, ColorResult } from 'react-color';
+import { getErrorMessage } from '../../utils/storageHelpers';
 
 interface TabPanelProps {
   children?: React.ReactNode;

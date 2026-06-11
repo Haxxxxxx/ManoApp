@@ -10,7 +10,6 @@ import { getErrorMessage } from '../../utils/storageHelpers';
 import { publishToSpotify } from '../../services/spotifyService';
 import { parseDurationToSeconds } from '../../utils/formatters';
 import LocalFileBrowser from '../LocalFileBrowser';
-import { LocalFile } from '../../services/localFileService';
 import AlbumIcon from '@mui/icons-material/Album';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import type { AlbumSong } from '../../types/album';
