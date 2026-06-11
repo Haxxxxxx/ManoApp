@@ -202,7 +202,7 @@ const DashboardView: React.FC = () => {
     setShowAnalyticsDialog(true);
     try {
       const data = await getAnalytics(user?.uid || '');
-      setAnalyticsData(data as AnalyticsData);
+      setAnalyticsData(data);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to fetch analytics'));
       setError('Failed to load analytics data');

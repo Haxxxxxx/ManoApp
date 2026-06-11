@@ -11,6 +11,7 @@ import { ArtistProfile } from '../types/artist';
 import { Album } from '../types/album';
 import { ActivityItem } from '../types/activity';
 import { Release } from '../types/release';
+import type { DashboardAnalyticsData } from '../types/analytics';
 import { FILE_SIZE_LIMITS } from '../utils/constants';
 
 const tripsCollection = 'trips';
@@ -505,7 +506,7 @@ export const createPlaylist = async (playlistData: Omit<Trip, 'id'>): Promise<Tr
  * @param userId The user ID to get analytics for
  * @returns The analytics data
  */
-export const getAnalytics = async (userId: string): Promise<any> => {
+export const getAnalytics = async (userId: string): Promise<DashboardAnalyticsData> => {
   try {
     // Get all trips for the user
     const tripsRef = collection(db, 'trips');

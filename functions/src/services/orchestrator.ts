@@ -86,7 +86,7 @@ export async function distributeRelease(
             filePath: song.filePath,
             userId: song.userId,
             metadata: song.metadata || {},
-          } as any,
+          },
           title: song.title,
           metadata: {
             isrc: song.metadata?.isrc,

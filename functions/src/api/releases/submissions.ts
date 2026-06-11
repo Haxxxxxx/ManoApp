@@ -65,32 +65,7 @@ export const getReleaseSubmissions = onCall(
         throw new HttpsError('invalid-argument', 'releaseId is required and must be a string');
       }
 
-      // Verify user has access to the release
-      const releaseDoc = await db.collection('releases').doc(releaseId).get();
-      if (!releaseDoc.exists) {
-        throw new HttpsError('not-found', 'Release not found');
-      }
-
-      const releaseData = releaseDoc.data();
-      if (!releaseData) {
-        throw new HttpsError('not-found', 'Release data not found');
-      }
-
-      // Check access
-      if (releaseData.userId !== userId) {
-        // Check if user is a collaborator
-        if (releaseData.projectId) {
-          const tripDoc = await db.collection('trips').doc(releaseData.projectId).get();
-          const tripData = tripDoc.data();
-          const collaborators = tripData?.collaborators || [];
-
-          if (!collaborators.includes(userId)) {
-            throw new HttpsError('permission-denied', 'User does not have access to this release');
-          }
-        } else {
-          throw new HttpsError('permission-denied', 'User does not have access to this release');
-        }
-      }
+      await assertReleaseAccess(releaseId, userId);
 
       // Get submissions
       const submissions = await getSubmissions(releaseId);

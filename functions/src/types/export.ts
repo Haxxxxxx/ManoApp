@@ -15,11 +15,21 @@ export interface RightsSplit {
   role?: string;
 }
 
-/** Minimal structural subset of src/types/song.ts Song used by connectors */
+/**
+ * Minimal structural subset of src/types/song.ts Song used by connectors.
+ *
+ * INTENTIONALLY narrower than the frontend Song: manifests arrive here as
+ * plain JSON deserialized from Firestore/queue payloads, so only the fields
+ * connectors actually read are declared. Do NOT add required fields that
+ * Firestore may not persist — they would type-check but be undefined at
+ * runtime.
+ */
 export interface ReleaseTrackSong {
   id: string;
   title: string;
   artist: string;
+  duration?: string;
+  userId?: string;
   filePath?: string;
   metadata?: Record<string, unknown>;
 }
