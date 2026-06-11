@@ -12,7 +12,6 @@ import {
   CircularProgress,
   Typography,
   useTheme,
-  alpha,
   ListItemIcon,
   Paper,
   Collapse,
@@ -24,6 +23,9 @@ import AddIcon from '@mui/icons-material/Add';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTrips } from '../contexts/TripContext';
+import { useSubscription } from '../contexts/SubscriptionContext';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
+import { Chip } from '@mui/material';
 import type { Trip } from '../types/trip';
 import { useNavigate, useLocation } from 'react-router-dom';
 import FolderIcon from '@mui/icons-material/Folder';
@@ -54,6 +56,7 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
   const [openSettings, setOpenSettings] = useState(false);
   const { currentUser } = useAuth();
   const { trips, sharedTrips, loading, addTrip } = useTrips();
+  const { plan, planId } = useSubscription();
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
@@ -109,56 +112,31 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
 
   const renderSidebarContent = () => (
     <>
-      <Box 
-        sx={{ 
-          p: 2, 
-          display: 'flex', 
+      <Box
+        sx={{
+          p: 2,
+          display: 'flex',
           alignItems: 'center',
-          position: 'relative',
-          '&::after': {
-            content: '""',
-            position: 'absolute',
-            bottom: 0,
-            left: 16,
-            right: 16,
-            height: '2px',
-            background: `linear-gradient(90deg, transparent, ${alpha(theme.palette.primary.main, 0.3)}, transparent)`,
-          }
+          gap: 1.25,
         }}
       >
         <Box
-          component="img"
-          src="/pigicon.png"
-          alt="ManoApp"
           sx={{
-            width: 48,
-            height: 48,
-            marginRight: 1.5,
-            borderRadius: 2,
-            objectFit: 'contain',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            filter: 'drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.1))',
-            '&:hover': {
-              transform: 'scale(1.1) rotate(5deg)',
-              filter: 'drop-shadow(0px 4px 8px rgba(0, 0, 0, 0.2))',
-            },
-          }}
-        />
-        <Typography 
-          variant="h6" 
-          fontWeight="bold" 
-          sx={{ 
-            color: 'primary.main',
-            background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              transform: 'scale(1.05)',
-            }
+            width: 32,
+            height: 32,
+            borderRadius: 1.5,
+            display: 'grid',
+            placeItems: 'center',
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            fontWeight: 700,
+            fontSize: 16,
+            flexShrink: 0,
           }}
         >
+          M
+        </Box>
+        <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.01em' }}>
           ManoApp
         </Typography>
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
@@ -222,9 +200,28 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
           </ListItemButton>
         </ListItem>
 
+        <ListItem disablePadding>
+          <ListItemButton
+            selected={location.pathname === '/billing'}
+            onClick={() => navigate('/billing')}
+          >
+            <ListItemIcon>
+              <CreditCardIcon />
+            </ListItemIcon>
+            <ListItemText primary="Billing" />
+            <Chip
+              label={plan.name}
+              size="small"
+              color={planId === 'free' ? 'default' : 'primary'}
+              variant={planId === 'free' ? 'outlined' : 'filled'}
+              sx={{ height: 20, fontSize: 11 }}
+            />
+          </ListItemButton>
+        </ListItem>
+
         {isAdmin && (
           <ListItem disablePadding>
-            <ListItemButton 
+            <ListItemButton
               selected={location.pathname === '/admin'}
               onClick={() => navigate('/admin')}
             >
@@ -235,7 +232,7 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
             </ListItemButton>
           </ListItem>
         )}
-        
+
         <ListItem disablePadding>
           <ListItemButton onClick={() => setOpenSettings(true)}>
             <ListItemIcon>

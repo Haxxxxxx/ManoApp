@@ -628,143 +628,70 @@ const MainContent = ({ selectedTrip, onSelectTrip, initialPanel }: MainContentPr
       {/* Content Section */}
       {selectedTrip ? (
         <>
-          {/* Action Buttons */}
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              gap: 2, 
+          {/* Project tabs — uniform, theme-driven (no per-button color) */}
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
               mb: 3,
               flexWrap: 'wrap',
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              pb: 2,
             }}
           >
             <Button
-              variant="outlined"
+              variant={activePanel === 'overview' ? 'contained' : 'text'}
               startIcon={<DashboardIcon />}
               onClick={() => setActivePanel('overview')}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'primary.main',
-                color: 'primary.main',
-                '&:hover': {
-                  borderColor: 'primary.dark',
-                  bgcolor: alpha(theme.palette.primary.main, 0.05),
-                }
-              }}
             >
               Overview
             </Button>
             <Button
-              variant="outlined"
-              startIcon={<FolderSharedIcon />}
-              onClick={handleOpenSharedDrive}
-              disabled={isLoadingDrive}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'info.main',
-                color: 'info.main',
-                '&:hover': {
-                  borderColor: 'info.dark',
-                  bgcolor: 'rgba(41, 182, 246, 0.05)',
-                }
-              }}
-            >
-              {isLoadingDrive ? 'Loading...' : 'Shared Drive'}
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<DescriptionIcon />}
-              onClick={handleOpenNotionTemplate}
-              disabled={isLoadingTemplate}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'secondary.main',
-                color: 'secondary.main',
-                '&:hover': {
-                  borderColor: 'secondary.dark',
-                  bgcolor: 'rgba(124, 77, 255, 0.05)',
-                }
-              }}
-            >
-              {isLoadingTemplate ? 'Loading...' : 'Notion Template'}
-            </Button>
-            <Button
-              variant="outlined"
+              variant={activePanel === 'metadata' ? 'contained' : 'text'}
               startIcon={<EditIcon />}
               onClick={() => setActivePanel('metadata')}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'warning.main',
-                color: 'warning.main',
-                '&:hover': {
-                  borderColor: 'warning.dark',
-                  bgcolor: 'rgba(255, 167, 38, 0.05)',
-                }
-              }}
             >
-              Edit Metadata
+              Metadata
             </Button>
             <Button
-              variant="outlined"
+              variant={activePanel === 'collaborators' ? 'contained' : 'text'}
               startIcon={<GroupAddIcon />}
               onClick={() => setActivePanel('collaborators')}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'success.main',
-                color: 'success.main',
-                '&:hover': {
-                  borderColor: 'success.dark',
-                  bgcolor: 'rgba(102, 187, 106, 0.05)',
-                }
-              }}
             >
               Collaborators
             </Button>
             <Button
-              variant="outlined"
+              variant={activePanel === 'analytics' ? 'contained' : 'text'}
               startIcon={<BarChartIcon />}
               onClick={() => setActivePanel('analytics')}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'error.main',
-                color: 'error.main',
-                '&:hover': {
-                  borderColor: 'error.dark',
-                  bgcolor: 'rgba(244, 67, 54, 0.05)',
-                }
-              }}
             >
               Analytics
             </Button>
             <Button
-              variant="outlined"
+              variant={activePanel === 'tags' ? 'contained' : 'text'}
               startIcon={<TagIcon />}
               onClick={() => setActivePanel('tags')}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'info.dark',
-                color: 'info.dark',
-                '&:hover': {
-                  borderColor: 'info.main',
-                  bgcolor: 'rgba(41, 182, 246, 0.05)',
-                }
-              }}
             >
               Tags
             </Button>
+            <Box sx={{ flexGrow: 1 }} />
             <Button
-              variant="outlined"
-              startIcon={<SettingsIcon />}
-              onClick={handleSettingsClick}
-              sx={{ 
-                borderRadius: 2,
-                borderColor: 'text.secondary',
-                color: 'text.secondary',
-                '&:hover': {
-                  borderColor: 'text.primary',
-                  bgcolor: 'rgba(255, 255, 255, 0.05)',
-                }
-              }}
+              variant="text"
+              startIcon={<FolderSharedIcon />}
+              onClick={handleOpenSharedDrive}
+              disabled={isLoadingDrive}
             >
+              {isLoadingDrive ? 'Loading…' : 'Shared Drive'}
+            </Button>
+            <Button
+              variant="text"
+              startIcon={<DescriptionIcon />}
+              onClick={handleOpenNotionTemplate}
+              disabled={isLoadingTemplate}
+            >
+              {isLoadingTemplate ? 'Loading…' : 'Notion'}
+            </Button>
+            <Button variant="text" startIcon={<SettingsIcon />} onClick={handleSettingsClick}>
               Settings
             </Button>
             {songs.length > 0 && (

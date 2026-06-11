@@ -3,6 +3,7 @@ import { ThemeProvider as MuiThemeProvider, createTheme, Theme } from '@mui/mate
 import { CssBaseline } from '@mui/material';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
+import { palette, radius, typography as typeTokens, spacingUnit } from '../theme/tokens';
 
 export interface ThemeSettings {
   primaryColor: string;
@@ -22,14 +23,14 @@ interface ThemeContextType {
 }
 
 export const defaultSettings: ThemeSettings = {
-  primaryColor: '#DC2626', // Vibrant red from gradient
-  secondaryColor: '#FF6B35', // Orange from gradient
-  darkMode: false,
+  primaryColor: palette.accent.main,
+  secondaryColor: palette.accent.hover,
+  darkMode: true, // dark studio is the default identity
   fontSize: 14,
   animations: true,
-  borderRadius: 16, // More rounded to match pig icon style
-  spacing: 8,
-  fontFamily: 'Roboto, Arial, sans-serif',
+  borderRadius: radius.md,
+  spacing: spacingUnit,
+  fontFamily: typeTokens.fontFamily,
 };
 
 const ThemeContext = createContext<ThemeContextType>({
@@ -47,157 +48,227 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
   // Apply theme settings
   const applyTheme = React.useCallback((newSettings: ThemeSettings) => {
+    // Dark studio is the product identity. Light mode is still supported via
+    // settings, but the refined token system targets dark; light falls back to
+    // a clean neutral rather than the old peach gradients.
+    const dark = newSettings.darkMode;
+    const r = newSettings.borderRadius;
+    const accent = newSettings.primaryColor;
+    const accentHover = newSettings.secondaryColor;
+
+    const bg = dark ? palette.bg.base : '#FAFAF9';
+    const bgRaised = dark ? palette.bg.raised : '#FFFFFF';
+    const surface = dark ? palette.surface.default : '#FFFFFF';
+    const surfaceElevated = dark ? palette.surface.elevated : '#FFFFFF';
+    const borderSubtle = dark ? palette.border.subtle : '#E7E5E4';
+    const borderDefault = dark ? palette.border.default : '#D6D3D1';
+    const textPrimary = dark ? palette.text.primary : '#1C1917';
+    const textSecondary = dark ? palette.text.secondary : '#78716C';
+
+    const transition = newSettings.animations ? 'all 0.15s ease' : 'none';
+
     const newTheme = createTheme({
       palette: {
-        mode: newSettings.darkMode ? 'dark' : 'light',
+        mode: dark ? 'dark' : 'light',
         primary: {
-          main: newSettings.primaryColor,
-          light: newSettings.primaryColor,
-          dark: newSettings.primaryColor,
-          contrastText: newSettings.darkMode ? '#ffffff' : '#000000',
+          main: accent,
+          light: accentHover,
+          dark: palette.accent.pressed,
+          contrastText: palette.text.onAccent,
         },
         secondary: {
-          main: newSettings.secondaryColor,
-          light: newSettings.secondaryColor,
-          dark: newSettings.secondaryColor,
-          contrastText: newSettings.darkMode ? '#ffffff' : '#000000',
+          main: accentHover,
+          contrastText: palette.text.onAccent,
         },
         background: {
-          default: newSettings.darkMode ? '#1a0a0a' : '#FFF5F0', // Light peach background
-          paper: newSettings.darkMode ? '#2a1a1a' : '#FFFFFF',
+          default: bg,
+          paper: surface,
         },
-        error: {
-          main: '#DC2626',
-          light: '#EF4444',
-          dark: '#991B1B',
+        text: {
+          primary: textPrimary,
+          secondary: textSecondary,
         },
-        warning: {
-          main: '#FF6B35',
-          light: '#FF8C5A',
-          dark: '#E55A2B',
-        },
-        info: {
-          main: '#3B82F6',
-        },
-        success: {
-          main: '#10B981',
-        },
+        divider: borderSubtle,
+        error: { main: palette.semantic.error },
+        warning: { main: palette.semantic.warning },
+        info: { main: palette.semantic.info },
+        success: { main: palette.semantic.success },
       },
       typography: {
-        fontSize: newSettings.fontSize,
         fontFamily: newSettings.fontFamily,
-        h1: {
-          fontSize: newSettings.fontSize * 2.5,
-          fontWeight: 500,
-        },
-        h2: {
-          fontSize: newSettings.fontSize * 2,
-          fontWeight: 500,
-        },
-        h3: {
-          fontSize: newSettings.fontSize * 1.75,
-          fontWeight: 500,
-        },
-        h4: {
-          fontSize: newSettings.fontSize * 1.5,
-          fontWeight: 500,
-        },
-        h5: {
-          fontSize: newSettings.fontSize * 1.25,
-          fontWeight: 500,
-        },
-        h6: {
-          fontSize: newSettings.fontSize * 1.1,
-          fontWeight: 500,
-        },
-        body1: {
-          fontSize: newSettings.fontSize,
-        },
-        body2: {
-          fontSize: newSettings.fontSize * 0.875,
-        },
+        fontSize: newSettings.fontSize,
+        h1: { fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 },
+        h2: { fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.25 },
+        h3: { fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em', lineHeight: 1.3 },
+        h4: { fontSize: 16, fontWeight: 600, lineHeight: 1.35 },
+        h5: { fontSize: 14, fontWeight: 600, lineHeight: 1.4 },
+        h6: { fontSize: 13, fontWeight: 600, lineHeight: 1.4 },
+        subtitle1: { fontSize: 14, fontWeight: 500 },
+        subtitle2: { fontSize: 13, fontWeight: 500, color: textSecondary },
+        body1: { fontSize: 14, fontWeight: 400, lineHeight: 1.55 },
+        body2: { fontSize: 13, fontWeight: 400, lineHeight: 1.5, color: textSecondary },
+        caption: { fontSize: 12, fontWeight: 400, color: textSecondary },
+        button: { fontSize: 14, fontWeight: 500, textTransform: 'none', letterSpacing: 0 },
       },
-      shape: {
-        borderRadius: newSettings.borderRadius,
-      },
+      shape: { borderRadius: r },
       spacing: newSettings.spacing,
       components: {
         MuiCssBaseline: {
           styleOverrides: {
             body: {
-              transition: newSettings.animations ? 'all 0.3s ease-in-out' : 'none',
-              background: newSettings.darkMode 
-                ? 'linear-gradient(135deg, #1a0a0a 0%, #2a1a1a 100%)'
-                : 'linear-gradient(135deg, #FFF5F0 0%, #FFE5D9 100%)',
-              backgroundAttachment: 'fixed',
+              backgroundColor: bg,
+              color: textPrimary,
               minHeight: '100vh',
+              fontFeatureSettings: typeTokens.fontFeatureSettings,
               scrollbarWidth: 'thin',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-                height: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                background: newSettings.darkMode ? '#1e1e1e' : '#FFE5D9',
-              },
+              scrollbarColor: `${borderDefault} transparent`,
+              '&::-webkit-scrollbar': { width: '10px', height: '10px' },
+              '&::-webkit-scrollbar-track': { background: 'transparent' },
               '&::-webkit-scrollbar-thumb': {
-                background: newSettings.darkMode ? '#DC2626' : '#FF6B35',
-                borderRadius: '4px',
+                background: borderDefault,
+                borderRadius: '6px',
+                border: `2px solid ${bg}`,
               },
-              '&::-webkit-scrollbar-thumb:hover': {
-                background: newSettings.darkMode ? '#EF4444' : '#FF8C5A',
-              },
+              '&::-webkit-scrollbar-thumb:hover': { background: palette.border.strong },
             },
           },
         },
         MuiButton: {
+          defaultProps: { disableElevation: true },
           styleOverrides: {
             root: {
-              borderRadius: newSettings.borderRadius,
+              borderRadius: r,
               textTransform: 'none',
               fontWeight: 500,
-              transition: newSettings.animations ? 'all 0.2s ease-in-out' : 'none',
+              padding: '8px 16px',
+              transition,
             },
-            contained: {
-              background: newSettings.darkMode
-                ? 'linear-gradient(135deg, #DC2626 0%, #991B1B 100%)'
-                : 'linear-gradient(135deg, #DC2626 0%, #FF6B35 100%)',
+            containedPrimary: {
+              backgroundColor: accent,
+              color: palette.text.onAccent,
+              '&:hover': { backgroundColor: accentHover },
+              '&:active': { backgroundColor: palette.accent.pressed },
+            },
+            outlined: {
+              borderColor: borderDefault,
+              color: textPrimary,
               '&:hover': {
-                background: newSettings.darkMode
-                  ? 'linear-gradient(135deg, #EF4444 0%, #B91C1C 100%)'
-                  : 'linear-gradient(135deg, #EF4444 0%, #FF8C5A 100%)',
+                borderColor: palette.border.strong,
+                backgroundColor: dark ? palette.surface.hover : '#F5F5F4',
+              },
+            },
+            text: {
+              color: textSecondary,
+              '&:hover': {
+                backgroundColor: dark ? palette.surface.hover : '#F5F5F4',
+                color: textPrimary,
               },
             },
           },
         },
         MuiPaper: {
+          defaultProps: { elevation: 0 },
           styleOverrides: {
             root: {
-              borderRadius: newSettings.borderRadius,
-              transition: newSettings.animations ? 'all 0.2s ease-in-out' : 'none',
-              background: newSettings.darkMode 
-                ? 'linear-gradient(135deg, #2a1a1a 0%, #3a2a2a 100%)'
-                : undefined,
+              backgroundImage: 'none',
+              backgroundColor: surface,
+              borderRadius: r,
+              transition,
             },
+            outlined: { border: `1px solid ${borderSubtle}` },
           },
         },
         MuiCard: {
+          defaultProps: { elevation: 0 },
           styleOverrides: {
             root: {
-              borderRadius: newSettings.borderRadius,
-              transition: newSettings.animations ? 'all 0.2s ease-in-out' : 'none',
-              background: newSettings.darkMode 
-                ? 'linear-gradient(135deg, #2a1a1a 0%, #3a2a2a 100%)'
-                : undefined,
+              backgroundImage: 'none',
+              backgroundColor: surface,
+              border: `1px solid ${borderSubtle}`,
+              borderRadius: r,
+              transition,
             },
           },
         },
         MuiDialog: {
           styleOverrides: {
             paper: {
-              borderRadius: newSettings.borderRadius * 1.5,
-              background: newSettings.darkMode 
-                ? 'linear-gradient(135deg, #2a1a1a 0%, #3a2a2a 100%)'
-                : 'linear-gradient(135deg, #FFFFFF 0%, #FFF5F0 100%)',
+              backgroundImage: 'none',
+              backgroundColor: surfaceElevated,
+              border: `1px solid ${borderDefault}`,
+              borderRadius: radius.lg,
+            },
+          },
+        },
+        MuiAppBar: {
+          styleOverrides: {
+            root: {
+              backgroundColor: bgRaised,
+              backgroundImage: 'none',
+              borderBottom: `1px solid ${borderSubtle}`,
+              boxShadow: 'none',
+              color: textPrimary,
+            },
+          },
+        },
+        MuiDrawer: {
+          styleOverrides: {
+            paper: {
+              backgroundColor: bgRaised,
+              backgroundImage: 'none',
+              borderRight: `1px solid ${borderSubtle}`,
+            },
+          },
+        },
+        MuiTextField: { defaultProps: { variant: 'outlined', size: 'small' } },
+        MuiOutlinedInput: {
+          styleOverrides: {
+            root: {
+              backgroundColor: dark ? palette.bg.raised : '#FFFFFF',
+              borderRadius: r,
+              transition,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: borderDefault },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: palette.border.strong },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderColor: accent,
+                borderWidth: '1px',
+              },
+            },
+          },
+        },
+        MuiChip: {
+          styleOverrides: {
+            root: { borderRadius: radius.sm, fontWeight: 500 },
+            outlined: { borderColor: borderDefault },
+          },
+        },
+        MuiTooltip: {
+          styleOverrides: {
+            tooltip: {
+              backgroundColor: surfaceElevated,
+              color: textPrimary,
+              border: `1px solid ${borderDefault}`,
+              fontSize: 12,
+              borderRadius: radius.sm,
+            },
+          },
+        },
+        MuiDivider: { styleOverrides: { root: { borderColor: borderSubtle } } },
+        MuiTableCell: {
+          styleOverrides: {
+            root: { borderColor: borderSubtle },
+            head: { color: textSecondary, fontWeight: 600, fontSize: 12 },
+          },
+        },
+        MuiListItemButton: {
+          styleOverrides: {
+            root: {
+              borderRadius: r,
+              transition,
+              '&.Mui-selected': {
+                backgroundColor: palette.accent.soft,
+                '&:hover': { backgroundColor: palette.accent.softHover },
+              },
             },
           },
         },

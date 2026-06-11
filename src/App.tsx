@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { TripProvider } from './contexts/TripContext'
+import { SubscriptionProvider } from './contexts/SubscriptionContext'
 import { ThemeProvider as CustomThemeProvider } from './contexts/ThemeContext'
 import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
@@ -16,6 +17,8 @@ import AlbumsPage from './components/pages/AlbumsPage'
 import AlbumDetailPage from './components/pages/AlbumDetailPage'
 import AdminPage from './components/pages/AdminPage'
 import AnalyticsDashboardPage from './components/pages/AnalyticsDashboardPage'
+import PricingPage from './components/billing/PricingPage'
+import BillingPage from './components/billing/BillingPage'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import NewFeaturesTour from './components/Onboarding/NewFeaturesTour'
 import { featureFlags, isFeatureEnabled } from './config/features'
@@ -84,6 +87,8 @@ function AppContent() {
           <Route path="/albums/:albumId/edit" element={<AlbumCustomizationPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/analytics" element={<AnalyticsDashboardPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/billing" element={<BillingPage />} />
         </Routes>
       </Box>
       {isFeatureEnabled('globalSearch') && <CommandPalette />}
@@ -116,14 +121,16 @@ function App() {
           <CssBaseline />
           <AuthProvider>
             <CustomThemeProvider>
-              <TripProvider>
-                <ErrorBoundary>
-                  <Routes>
-                    <Route path="/auth" element={<AuthForm />} />
-                    <Route path="/*" element={<AppWithOnboarding />} />
-                  </Routes>
-                </ErrorBoundary>
-              </TripProvider>
+              <SubscriptionProvider>
+                <TripProvider>
+                  <ErrorBoundary>
+                    <Routes>
+                      <Route path="/auth" element={<AuthForm />} />
+                      <Route path="/*" element={<AppWithOnboarding />} />
+                    </Routes>
+                  </ErrorBoundary>
+                </TripProvider>
+              </SubscriptionProvider>
             </CustomThemeProvider>
           </AuthProvider>
         </MuiThemeProvider>
