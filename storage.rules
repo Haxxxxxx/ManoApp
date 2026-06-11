@@ -50,7 +50,8 @@ service firebase.storage {
     // Empty marker object created per song by createSong
     match /projects/{tripId}/{songId} {
       allow read: if hasTripAccess(tripId);
-      allow write: if hasTripAccess(tripId) && request.resource.size < 1024;
+      allow write: if hasTripAccess(tripId) &&
+        (request.resource == null || request.resource.size < 1024);
     }
 
     // Cover art — the first segment is a tripId, songId, OR albumId depending
