@@ -19,6 +19,8 @@ import AdminPage from './components/pages/AdminPage'
 import AnalyticsDashboardPage from './components/pages/AnalyticsDashboardPage'
 import PricingPage from './components/billing/PricingPage'
 import BillingPage from './components/billing/BillingPage'
+import CatalogPage from './components/pages/CatalogPage'
+import DistributionPage from './components/pages/DistributionPage'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import NewFeaturesTour from './components/Onboarding/NewFeaturesTour'
 import { featureFlags, isFeatureEnabled } from './config/features'
@@ -81,6 +83,8 @@ function AppContent() {
           <Route path="/trip/:tripId" element={<MainContent selectedTrip={selectedTrip} onSelectTrip={handleSelectTrip} />} />
           <Route path="/song/:songId" element={<SongDetail />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/catalog" element={<CatalogPage />} />
+          <Route path="/distribution" element={<DistributionPage />} />
           <Route path="/albums" element={<AlbumsPage />} />
           <Route path="/albums/:albumId" element={<AlbumDetailPage />} />
           <Route path="/albums/create" element={<AlbumCustomizationPage />} />

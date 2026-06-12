@@ -294,7 +294,8 @@ export const getUserSongs = async (userId: string) => {
     const q = query(
       collection(db, songsCollection),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(500)
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
@@ -996,7 +997,8 @@ export const getAlbums = async (userId: string) => {
     const q = query(
       collection(db, 'albums'),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(500)
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
@@ -1187,6 +1189,25 @@ export const getReleasesForProject = async (projectId: string): Promise<Release[
       collection(db, releasesCollection),
       where('projectId', '==', projectId),
       orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Release));
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
+ * Get every release owned by a user, across all projects.
+ * Backs the top-level Distribution screen.
+ */
+export const getUserReleases = async (userId: string): Promise<Release[]> => {
+  try {
+    const q = query(
+      collection(db, releasesCollection),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
+      limit(500)
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Release));

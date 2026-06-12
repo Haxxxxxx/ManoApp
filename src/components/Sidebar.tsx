@@ -40,6 +40,8 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import MenuIcon from '@mui/icons-material/Menu';
 import AlbumIcon from '@mui/icons-material/Album';
+import LibraryMusicIcon from '@mui/icons-material/LibraryMusic';
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import { checkIsAdmin } from '../services/userRoleService';
@@ -164,6 +166,30 @@ const Sidebar = ({ selectedTrip, onSelectTrip }: SidebarProps) => {
           </ListItemButton>
         </ListItem>
         
+        <ListItem disablePadding>
+          <ListItemButton
+            selected={location.pathname === '/catalog'}
+            onClick={() => navigate('/catalog')}
+          >
+            <ListItemIcon>
+              <LibraryMusicIcon />
+            </ListItemIcon>
+            <ListItemText primary="Catalog" />
+          </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding>
+          <ListItemButton
+            selected={location.pathname === '/distribution'}
+            onClick={() => navigate('/distribution')}
+          >
+            <ListItemIcon>
+              <RocketLaunchIcon />
+            </ListItemIcon>
+            <ListItemText primary="Distribution" />
+          </ListItemButton>
+        </ListItem>
+
         <ListItem disablePadding>
           <ListItemButton
             selected={location.pathname === '/albums'}
