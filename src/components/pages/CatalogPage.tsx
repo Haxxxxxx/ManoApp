@@ -19,6 +19,7 @@ import {
   LinearProgress,
   Tooltip,
   Avatar,
+  Alert,
 } from '@mui/material';
 import MusicNoteIcon from '@mui/icons-material/MusicNote';
 import AlbumIcon from '@mui/icons-material/Album';
@@ -67,6 +68,7 @@ const CatalogPage = () => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [projects, setProjects] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<SongStatus | 'all'>('all');
 
@@ -74,17 +76,26 @@ const CatalogPage = () => {
     if (!currentUser) return;
     let active = true;
     setLoading(true);
+    setError(null);
     Promise.all([
-      getUserSongs(currentUser.uid).catch(() => [] as Song[]),
-      getAlbums(currentUser.uid).catch(() => [] as Album[]),
-      getTrips(currentUser.uid).catch(() => [] as Trip[]),
-    ]).then(([s, a, t]) => {
-      if (!active) return;
-      setSongs(s);
-      setAlbums(a as Album[]);
-      setProjects(t as Trip[]);
-      setLoading(false);
-    });
+      getUserSongs(currentUser.uid),
+      getAlbums(currentUser.uid),
+      getTrips(currentUser.uid),
+    ])
+      .then(([s, a, t]) => {
+        if (!active) return;
+        setSongs(s);
+        setAlbums(a as Album[]);
+        setProjects(t as Trip[]);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (!active) return;
+        setError(
+          e instanceof Error ? e.message : 'Could not load your catalog. Please try again.'
+        );
+        setLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -155,6 +166,12 @@ const CatalogPage = () => {
             </Select>
           )}
         </Stack>
+
+        {error && (
+          <Alert severity="error" variant="outlined" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
         {loading ? (
           <SkeletonLoader variant="card" count={6} />

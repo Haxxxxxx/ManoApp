@@ -294,7 +294,8 @@ export const getUserSongs = async (userId: string) => {
     const q = query(
       collection(db, songsCollection),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(500)
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
@@ -996,7 +997,8 @@ export const getAlbums = async (userId: string) => {
     const q = query(
       collection(db, 'albums'),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(500)
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
@@ -1204,7 +1206,8 @@ export const getUserReleases = async (userId: string): Promise<Release[]> => {
     const q = query(
       collection(db, releasesCollection),
       where('userId', '==', userId),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(500)
     );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Release));

@@ -16,6 +16,7 @@ import {
   Button,
   ToggleButton,
   ToggleButtonGroup,
+  Alert,
 } from '@mui/material';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -69,21 +70,28 @@ const DistributionPage = () => {
   const [releases, setReleases] = useState<Release[]>([]);
   const [projects, setProjects] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ReleaseStatus | 'all'>('all');
 
   useEffect(() => {
     if (!currentUser) return;
     let active = true;
     setLoading(true);
-    Promise.all([
-      getUserReleases(currentUser.uid).catch(() => [] as Release[]),
-      getTrips(currentUser.uid).catch(() => [] as Trip[]),
-    ]).then(([r, t]) => {
-      if (!active) return;
-      setReleases(r);
-      setProjects(t as Trip[]);
-      setLoading(false);
-    });
+    setError(null);
+    Promise.all([getUserReleases(currentUser.uid), getTrips(currentUser.uid)])
+      .then(([r, t]) => {
+        if (!active) return;
+        setReleases(r);
+        setProjects(t as Trip[]);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (!active) return;
+        setError(
+          e instanceof Error ? e.message : 'Could not load your releases. Please try again.'
+        );
+        setLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -159,6 +167,12 @@ const DistributionPage = () => {
             </ToggleButton>
           ))}
         </ToggleButtonGroup>
+
+        {error && (
+          <Alert severity="error" variant="outlined" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
         {loading ? (
           <SkeletonLoader variant="card" count={5} />
