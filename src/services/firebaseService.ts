@@ -1196,6 +1196,24 @@ export const getReleasesForProject = async (projectId: string): Promise<Release[
 };
 
 /**
+ * Get every release owned by a user, across all projects.
+ * Backs the top-level Distribution screen.
+ */
+export const getUserReleases = async (userId: string): Promise<Release[]> => {
+  try {
+    const q = query(
+      collection(db, releasesCollection),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Release));
+  } catch (error) {
+    throw error;
+  }
+};
+
+/**
  * Update a release
  */
 export const updateRelease = async (releaseId: string, updates: Partial<Release>): Promise<Release> => {
